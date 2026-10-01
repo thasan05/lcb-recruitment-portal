@@ -61,10 +61,12 @@
 - [x] Executed production build (`npm run build`) — compiled and generated all 18 routes with zero errors
 
 ## IN PROGRESS
-- [ ] Initial Git commit of the complete MVP implementation
+- [x] Initial Git commit of the complete MVP implementation
+- [x] Pushed to GitHub remote `origin/main` (`https://github.com/thasan05/lcb-recruitment-portal.git`)
 
 ## NEXT
-- [ ] Push to GitHub remote `origin/main` for user review and Vercel import
+- [ ] Connect repository to Vercel for continuous deployment
+- [ ] Configure live Supabase database credentials (optional)
 
 ## FUTURE
 - [ ] Direct email dispatch integration (Resend / SMTP)
