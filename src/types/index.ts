@@ -55,7 +55,7 @@ export const STATUS_CONFIG: Record<CandidateStatus, StatusMeta> = {
     badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
     dotClass: 'bg-emerald-400',
     message:
-      'Congratulations! You have been selected to move forward with LinkedIn Community Bangladesh.',
+      'Congratulations! You have been selected to move forward with LinkedIn Community Bangladesh. Soon you will receive an email from LCB with necessary instructions.',
   },
   rejected: {
     key: 'rejected',

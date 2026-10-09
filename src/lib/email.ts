@@ -44,17 +44,15 @@ export async function sendCandidateStatusEmail({
   const statusUrl = `${baseUrl.replace(/\/$/, '')}/status/${cleanToken}`;
 
   // Resolve active template based on templateType and candidateStatus
-  let resolvedType: 'decision_pending' | 'accepted' | 'rejected' | 'status_update' = 'decision_pending';
-  if (templateType === 'accepted') {
-    resolvedType = 'accepted';
-  } else if (templateType === 'rejected') {
-    resolvedType = 'rejected';
-  } else if (templateType === 'status_update') {
+  let resolvedType: 'decision_pending' | 'status_update' = 'decision_pending';
+  if (templateType === 'status_update') {
     resolvedType = 'status_update';
   } else if (templateType === 'auto' || !templateType) {
-    if (candidateStatus === 'accepted') resolvedType = 'accepted';
-    else if (candidateStatus === 'rejected') resolvedType = 'rejected';
-    else resolvedType = 'decision_pending';
+    if (candidateStatus && candidateStatus !== 'decision_pending') {
+      resolvedType = 'status_update';
+    } else {
+      resolvedType = 'decision_pending';
+    }
   } else {
     resolvedType = 'decision_pending';
   }

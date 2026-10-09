@@ -16,11 +16,7 @@ interface Props {
 export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: Props) {
   // Determine template based on candidate's current status
   const defaultTemplateType: TemplateType =
-    candidate?.status === 'accepted'
-      ? 'accepted'
-      : candidate?.status === 'rejected'
-      ? 'rejected'
-      : 'decision_pending';
+    candidate?.status === 'decision_pending' ? 'decision_pending' : 'status_update';
 
   const [templateType, setTemplateType] = useState<TemplateType>(defaultTemplateType);
   const [subject, setSubject] = useState(
@@ -37,11 +33,7 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
   useEffect(() => {
     if (candidate && isOpen) {
       const type: TemplateType =
-        candidate.status === 'accepted'
-          ? 'accepted'
-          : candidate.status === 'rejected'
-          ? 'rejected'
-          : 'decision_pending';
+        candidate.status === 'decision_pending' ? 'decision_pending' : 'status_update';
       setTemplateType(type);
       setSubject(EMAIL_TEMPLATES[type]?.subject || '');
       setMessage(EMAIL_TEMPLATES[type]?.defaultMessage || '');
@@ -149,45 +141,26 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
               Select Email Template
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Option 1: Offer & Acceptance */}
+              {/* Option 1: Status Update Notification */}
               <button
                 type="button"
-                onClick={() => setTemplateType('accepted')}
+                onClick={() => setTemplateType('status_update')}
                 className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                  templateType === 'accepted'
-                    ? 'bg-emerald-600/15 border-emerald-500/50 ring-1 ring-emerald-500/30'
+                  templateType === 'status_update'
+                    ? 'bg-cyan-600/15 border-cyan-500/50 ring-1 ring-cyan-500/30'
                     : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04]'
                 }`}
               >
-                <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${templateType === 'accepted' ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <Sparkles className={`h-4 w-4 mt-0.5 flex-shrink-0 ${templateType === 'status_update' ? 'text-cyan-400' : 'text-slate-500'}`} />
                 <div>
-                  <div className="text-xs font-bold text-white">Offer & Acceptance (Congratulations)</div>
+                  <div className="text-xs font-bold text-white">Status Decision Update</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Official offer letter with onboarding steps.
+                    Alerts candidate to check updated decision in their private portal.
                   </div>
                 </div>
               </button>
 
-              {/* Option 2: Application Decision / Rejected */}
-              <button
-                type="button"
-                onClick={() => setTemplateType('rejected')}
-                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                  templateType === 'rejected'
-                    ? 'bg-rose-600/15 border-rose-500/50 ring-1 ring-rose-500/30'
-                    : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04]'
-                }`}
-              >
-                <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${templateType === 'rejected' ? 'text-rose-400' : 'text-slate-500'}`} />
-                <div>
-                  <div className="text-xs font-bold text-white">Application Decision (Not Selected)</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Polite recruitment status notification.
-                  </div>
-                </div>
-              </button>
-
-              {/* Option 3: Decision Pending */}
+              {/* Option 2: Decision Pending */}
               <button
                 type="button"
                 onClick={() => setTemplateType('decision_pending')}
@@ -201,26 +174,7 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
                 <div>
                   <div className="text-xs font-bold text-white">Decision Pending Notice</div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    Interview completed notice with tracking link.
-                  </div>
-                </div>
-              </button>
-
-              {/* Option 4: Status Update Notification */}
-              <button
-                type="button"
-                onClick={() => setTemplateType('status_update')}
-                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                  templateType === 'status_update'
-                    ? 'bg-cyan-600/15 border-cyan-500/50 ring-1 ring-cyan-500/30'
-                    : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04]'
-                }`}
-              >
-                <Sparkles className={`h-4 w-4 mt-0.5 flex-shrink-0 ${templateType === 'status_update' ? 'text-cyan-400' : 'text-slate-500'}`} />
-                <div>
-                  <div className="text-xs font-bold text-white">General Status Update</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Alerts candidate to check updated results.
+                    Interview completed notice with private tracking link.
                   </div>
                 </div>
               </button>

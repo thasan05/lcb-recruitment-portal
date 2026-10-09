@@ -43,7 +43,7 @@ export async function POST(
       secureToken: candidate.secure_token,
       candidateStatus: candidate.status,
       templateType: (!templateType || templateType === 'auto')
-        ? (candidate.status === 'accepted' ? 'accepted' : candidate.status === 'rejected' ? 'rejected' : 'decision_pending')
+        ? (candidate.status !== 'decision_pending' ? 'status_update' : 'decision_pending')
         : templateType,
       subject,
       headline,

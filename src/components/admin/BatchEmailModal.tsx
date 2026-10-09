@@ -68,16 +68,12 @@ export function BatchEmailModal({
   const pendingInTarget = targetList.filter((c) => c.status === 'decision_pending').length;
 
   const activeTemplate =
-    templateType === 'accepted'
-      ? EMAIL_TEMPLATES.accepted
-      : templateType === 'rejected'
-      ? EMAIL_TEMPLATES.rejected
-      : templateType === 'status_update'
+    templateType === 'status_update'
       ? EMAIL_TEMPLATES.status_update
       : templateType === 'auto'
       ? {
           name: 'Smart Match Candidate Status (Recommended)',
-          subject: 'Auto-matched to candidate status (Offer / Decision / Review)',
+          subject: 'Auto-matched to candidate status (Review / Update)',
           headline: 'Official Recruitment Notification',
           buttonText: 'View Candidate Portal',
           defaultMessage: '',
@@ -286,6 +282,7 @@ export function BatchEmailModal({
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Option 1: Smart Match (Auto) */}
+                  {/* Option 1: Smart Match (Auto) */}
                   <button
                     type="button"
                     onClick={() => setTemplateType('auto')}
@@ -307,53 +304,32 @@ export function BatchEmailModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 mt-1">
-                      Dispatches matching template for each candidate: <strong>Offer letter</strong> to Accepted, <strong>Application Decision</strong> to Rejected, and <strong>Under Review notice</strong> to Decision Pending.
+                      Dispatches <strong>Status Decision Update</strong> to evaluated candidates (Accepted/Rejected) to view their portal result, and <strong>Under Review notice</strong> to Decision Pending candidates.
                     </p>
                   </button>
 
-                  {/* Option 2: Offer & Acceptance */}
+                  {/* Option 2: Status Decision Update */}
                   <button
                     type="button"
-                    onClick={() => setTemplateType('accepted')}
+                    onClick={() => setTemplateType('status_update')}
                     className={`p-3.5 rounded-2xl border text-left transition-all ${
-                      templateType === 'accepted'
-                        ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500/50'
+                      templateType === 'status_update'
+                        ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/50'
                         : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <Mail className="h-4 w-4 text-cyan-400" />
                       <span className="text-xs font-bold text-white">
-                        Offer & Acceptance (Congratulations)
+                        Status Decision Update
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Sends congratulations offer and onboarding next steps to all selected.
+                      Notifies candidates that a decision has been finalized and invites them to view results in the portal.
                     </p>
                   </button>
 
-                  {/* Option 3: Rejected / Not Selected */}
-                  <button
-                    type="button"
-                    onClick={() => setTemplateType('rejected')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all ${
-                      templateType === 'rejected'
-                        ? 'border-rose-500 bg-rose-950/40 ring-1 ring-rose-500/50'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-rose-400" />
-                      <span className="text-xs font-bold text-white">
-                        Application Decision (Not Selected)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Sends polite notice thanking candidate and encouraging future applications.
-                    </p>
-                  </button>
-
-                  {/* Option 4: Decision Pending */}
+                  {/* Option 3: Decision Pending */}
                   <button
                     type="button"
                     onClick={() => setTemplateType('decision_pending')}
@@ -371,27 +347,6 @@ export function BatchEmailModal({
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
                       Welcome email containing private tracking link and review ongoing notice.
-                    </p>
-                  </button>
-
-                  {/* Option 5: General Status Update */}
-                  <button
-                    type="button"
-                    onClick={() => setTemplateType('status_update')}
-                    className={`p-3.5 rounded-2xl border text-left transition-all ${
-                      templateType === 'status_update'
-                        ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/50'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-cyan-400" />
-                      <span className="text-xs font-bold text-white">
-                        General Status Decision Update
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Notifies candidates that a decision has been updated and invites them to check.
                     </p>
                   </button>
                 </div>
