@@ -3,6 +3,7 @@ import { getCandidateBySecureToken } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(
   req: NextRequest,
@@ -22,16 +23,25 @@ export async function GET(
       );
     }
 
-    // Only return public-safe recruitment status data
-    return NextResponse.json({
-      candidate: {
-        name: candidate.name,
-        status: candidate.status,
-        updated_at: candidate.updated_at,
-        is_expired: candidate.is_expired,
-        expired_at: candidate.expired_at,
+    // Only return public-safe recruitment status data with no-store cache headers
+    return NextResponse.json(
+      {
+        candidate: {
+          name: candidate.name,
+          status: candidate.status,
+          updated_at: candidate.updated_at,
+          is_expired: candidate.is_expired,
+          expired_at: candidate.expired_at,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { error: 'Failed to retrieve application', details: error.message },

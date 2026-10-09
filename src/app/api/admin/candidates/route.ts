@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { getCandidates, resetAllCandidates, createCandidate } from '@/lib/db';
+import { getCandidates, resetAllCandidates, createCandidate, updateCandidateDetails } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +55,44 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Candidate ${newCandidate.name} created successfully.`,
       candidate: newCandidate,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const isAdmin = await checkAdminAuth();
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const updates = Array.isArray(body?.updates) ? body.updates : [];
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
+    }
+
+    const updatedCandidates = [];
+    for (const item of updates) {
+      if (item && item.id) {
+        const updated = await updateCandidateDetails(item.id, {
+          name: item.name,
+          email: item.email,
+          status: item.status,
+        });
+        if (updated) {
+          updatedCandidates.push(updated);
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      updatedCount: updatedCandidates.length,
+      candidates: updatedCandidates,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

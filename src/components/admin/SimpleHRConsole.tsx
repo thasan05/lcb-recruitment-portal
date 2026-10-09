@@ -22,6 +22,8 @@ import {
   Trash2,
   UserPlus,
   Pencil,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import { LCBLogo } from '@/components/LCBLogo';
 import { EmailComposeModal } from '@/components/admin/EmailComposeModal';
@@ -38,6 +40,12 @@ export function SimpleHRConsole() {
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Status changes tracking and save states
+  const [unsavedStatusMap, setUnsavedStatusMap] = useState<Record<string, CandidateStatus>>({});
+  const [savingIdMap, setSavingIdMap] = useState<Record<string, boolean>>({});
+  const [savedSuccessIdMap, setSavedSuccessIdMap] = useState<Record<string, boolean>>({});
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
   // Email modal state
   const [selectedCandidateForEmail, setSelectedCandidateForEmail] = useState<Candidate | null>(null);
@@ -444,24 +452,37 @@ export function SimpleHRConsole() {
     }
   };
 
-  // Change Status immediately
-  const handleStatusChange = async (id: string, newStatus: CandidateStatus) => {
-    const nowIso = new Date().toISOString();
-    // Optimistic UI update with current save timestamp
+  // Change Status in UI and mark as unsaved change
+  const handleStatusChange = (id: string, newStatus: CandidateStatus) => {
+    // Immediate responsive update to local candidate list
     setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: newStatus, updated_at: nowIso } : c))
+      prev.map((c) => (c.id === id ? { ...c, status: newStatus } : c))
     );
+    // Track as pending unsaved
+    setUnsavedStatusMap((prev) => ({ ...prev, [id]: newStatus }));
+  };
+
+  // Save single candidate status to database
+  const handleSaveSingleCandidate = async (id: string) => {
+    const candidate = candidates.find((c) => c.id === id);
+    if (!candidate) return;
+
+    setSavingIdMap((prev) => ({ ...prev, [id]: true }));
 
     try {
       const res = await fetch(`/api/admin/candidates/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({
+          status: candidate.status,
+          name: candidate.name,
+          email: candidate.email,
+        }),
       });
+
       if (!res.ok) {
         const errorData = await res.json();
-        alert(`Failed to update status: ${errorData.error || 'Server error'}`);
-        loadCandidates();
+        alert(`Failed to save candidate: ${errorData.error || 'Server error'}`);
       } else {
         const data = await res.json();
         if (data.candidate) {
@@ -469,24 +490,112 @@ export function SimpleHRConsole() {
             prev.map((c) => (c.id === id ? { ...c, ...data.candidate } : c))
           );
         }
-        // Find updated candidate
-        const updatedCandidate = candidates.find((c) => c.id === id);
-        if (updatedCandidate) {
-          // Notify HR that they can now send the status update email
-          setLastEmailToast(
-            `Status updated to "${STATUS_CONFIG[newStatus].label}" for ${updatedCandidate.name}. You can now send the Status Update email.`
-          );
-          setTimeout(() => setLastEmailToast(null), 6000);
-        }
+        // Remove from pending unsaved map
+        setUnsavedStatusMap((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        // Flash "Saved ✓" checkmark indicator for 3 seconds
+        setSavedSuccessIdMap((prev) => ({ ...prev, [id]: true }));
+        setTimeout(() => {
+          setSavedSuccessIdMap((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }, 3000);
+
+        setLastEmailToast(
+          `✅ Saved "${candidate.name}" as "${STATUS_CONFIG[candidate.status].label}". Candidate tracking link is live with this decision!`
+        );
+        setTimeout(() => setLastEmailToast(null), 5000);
       }
-    } catch (err) {
-      alert('Network error while updating status');
-      loadCandidates();
+    } catch (err: any) {
+      alert('Network error while saving candidate status: ' + err.message);
+    } finally {
+      setSavingIdMap((prev) => ({ ...prev, [id]: false }));
     }
   };
 
-  // Open compose modal for a candidate
-  const handleOpenEmailModal = (candidate: Candidate) => {
+  // Central Save All Candidates / Save All Changes
+  const handleSaveAllCandidates = async () => {
+    const unsavedIds = Object.keys(unsavedStatusMap);
+    // If there are specific unsaved candidates, update those; otherwise sync all candidates
+    const targetCandidates =
+      unsavedIds.length > 0
+        ? candidates.filter((c) => unsavedIds.includes(c.id))
+        : candidates;
+
+    if (targetCandidates.length === 0) {
+      setLastEmailToast('All candidate decisions are already saved.');
+      setTimeout(() => setLastEmailToast(null), 3000);
+      return;
+    }
+
+    setIsSavingAll(true);
+
+    try {
+      const updates = targetCandidates.map((c) => ({
+        id: c.id,
+        status: c.status,
+        name: c.name,
+        email: c.email,
+      }));
+
+      const res = await fetch('/api/admin/candidates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save candidate changes');
+      }
+
+      if (data.candidates && Array.isArray(data.candidates)) {
+        const updatedMap = new Map(data.candidates.map((c: Candidate) => [c.id, c]));
+        setCandidates((prev) =>
+          prev.map((c) => (updatedMap.has(c.id) ? { ...c, ...(updatedMap.get(c.id) as Candidate) } : c))
+        );
+      }
+
+      // Flash success badges
+      const successMap: Record<string, boolean> = {};
+      targetCandidates.forEach((c) => {
+        successMap[c.id] = true;
+      });
+      setSavedSuccessIdMap(successMap);
+      setTimeout(() => setSavedSuccessIdMap({}), 3000);
+
+      // Clear unsaved map
+      setUnsavedStatusMap({});
+
+      setLastEmailToast(
+        `✅ Successfully saved ${targetCandidates.length} candidate(s) to the database! All tracking links are now synced.`
+      );
+      setTimeout(() => setLastEmailToast(null), 6000);
+    } catch (err: any) {
+      alert('Failed to save candidates: ' + err.message);
+    } finally {
+      setIsSavingAll(false);
+    }
+  };
+
+  // Open batch email modal, saving any pending changes first
+  const handleOpenBatchEmailModal = async () => {
+    if (Object.keys(unsavedStatusMap).length > 0) {
+      await handleSaveAllCandidates();
+    }
+    setBatchEmailModalOpen(true);
+  };
+
+  // Open compose modal for a candidate, auto-saving pending changes for them first
+  const handleOpenEmailModal = async (candidate: Candidate) => {
+    if (unsavedStatusMap[candidate.id]) {
+      await handleSaveSingleCandidate(candidate.id);
+    }
     setSelectedCandidateForEmail(candidate);
     setEmailModalOpen(true);
   };
@@ -530,6 +639,8 @@ export function SimpleHRConsole() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const unsavedCount = Object.keys(unsavedStatusMap).length;
 
   return (
     <div className="min-h-screen bg-[#040614] text-white selection:bg-blue-600 selection:text-white relative">
@@ -643,6 +754,12 @@ export function SimpleHRConsole() {
                   <Clock className="h-3 w-3 text-cyan-400" />
                   <span>30-Day Auto-Expiry Active</span>
                 </span>
+                {unsavedCount > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span>{unsavedCount} Unsaved Changes</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 {candidates.length} {candidates.length === 1 ? 'candidate' : 'candidates'} enrolled &bull;{' '}
@@ -675,11 +792,39 @@ export function SimpleHRConsole() {
                 <span>Add Candidate</span>
               </button>
 
+              {/* Central Save All Changes Button */}
+              <button
+                type="button"
+                disabled={candidates.length === 0 || isSavingAll}
+                onClick={handleSaveAllCandidates}
+                className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] ${
+                  unsavedCount > 0
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold shadow-amber-500/25 ring-2 ring-amber-300 animate-pulse'
+                    : 'border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400'
+                }`}
+                title="Save all candidate decisions and statuses to the database"
+              >
+                {isSavingAll ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-300" />
+                ) : unsavedCount > 0 ? (
+                  <Save className="h-3.5 w-3.5 text-slate-950" />
+                ) : (
+                  <Save className="h-3.5 w-3.5 text-cyan-400" />
+                )}
+                <span>
+                  {isSavingAll
+                    ? 'Saving Changes...'
+                    : unsavedCount > 0
+                    ? `Save All Changes (${unsavedCount})`
+                    : 'Save All Changes'}
+                </span>
+              </button>
+
               {/* Send All Emails in Batch */}
               <button
                 type="button"
                 disabled={candidates.length === 0}
-                onClick={() => setBatchEmailModalOpen(true)}
+                onClick={handleOpenBatchEmailModal}
                 className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/30 hover:scale-[1.02] active:scale-[0.98]"
                 title="Dispatch recruitment emails to all candidates automatically"
               >
@@ -790,28 +935,76 @@ export function SimpleHRConsole() {
                           {candidate.email}
                         </td>
 
-                        {/* Status Dropdown */}
+                        {/* Status Dropdown + Individual Save Button */}
                         <td className="py-4 px-4 sm:px-6">
-                          <select
-                            value={candidate.status}
-                            onChange={(e) =>
-                              handleStatusChange(candidate.id, e.target.value as CandidateStatus)
-                            }
-                            className={`rounded-xl px-3 py-1.5 text-xs font-semibold border bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-colors cursor-pointer ${meta.badgeClass}`}
-                          >
-                            <option value="decision_pending" className="bg-slate-900 text-amber-300">
-                              Decision Pending
-                            </option>
-                            <option value="accepted" className="bg-slate-900 text-emerald-300">
-                              Accepted
-                            </option>
-                            <option value="rejected" className="bg-slate-900 text-rose-300">
-                              Rejected
-                            </option>
-                          </select>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <select
+                              value={candidate.status}
+                              onChange={(e) =>
+                                handleStatusChange(candidate.id, e.target.value as CandidateStatus)
+                              }
+                              className={`rounded-xl px-3 py-1.5 text-xs font-semibold border bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-colors cursor-pointer ${meta.badgeClass}`}
+                            >
+                              <option value="decision_pending" className="bg-slate-900 text-amber-300">
+                                Decision Pending
+                              </option>
+                              <option value="accepted" className="bg-slate-900 text-emerald-300">
+                                Accepted
+                              </option>
+                              <option value="rejected" className="bg-slate-900 text-rose-300">
+                                Rejected
+                              </option>
+                            </select>
+
+                            {/* Individual Save Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleSaveSingleCandidate(candidate.id)}
+                              disabled={savingIdMap[candidate.id]}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                                savedSuccessIdMap[candidate.id]
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                  : unsavedStatusMap[candidate.id] !== undefined
+                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-amber-500/40 ring-1 ring-amber-300 animate-pulse'
+                                  : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white'
+                              }`}
+                              title={
+                                unsavedStatusMap[candidate.id] !== undefined
+                                  ? 'Unsaved change: Click to save to database'
+                                  : 'Re-save / sync status to database'
+                              }
+                            >
+                              {savingIdMap[candidate.id] ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-cyan-400" />
+                              ) : savedSuccessIdMap[candidate.id] ? (
+                                <Check className="h-3 w-3 text-emerald-400" />
+                              ) : (
+                                <Save className="h-3 w-3" />
+                              )}
+                              <span>
+                                {savingIdMap[candidate.id]
+                                  ? 'Saving...'
+                                  : savedSuccessIdMap[candidate.id]
+                                  ? 'Saved ✓'
+                                  : unsavedStatusMap[candidate.id] !== undefined
+                                  ? 'Save'
+                                  : 'Save'}
+                              </span>
+                            </button>
+                          </div>
+
                           <div className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-slate-500 flex-shrink-0" />
-                            <span className="truncate">Updated {formatLastUpdated(candidate.updated_at)}</span>
+                            {unsavedStatusMap[candidate.id] !== undefined ? (
+                              <span className="text-amber-400 font-medium flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
+                                Unsaved change &bull; Click Save
+                              </span>
+                            ) : (
+                              <>
+                                <Clock className="h-3 w-3 text-slate-500 flex-shrink-0" />
+                                <span className="truncate">Updated {formatLastUpdated(candidate.updated_at)}</span>
+                              </>
+                            )}
                           </div>
                         </td>
 

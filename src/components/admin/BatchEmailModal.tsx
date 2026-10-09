@@ -41,7 +41,7 @@ export function BatchEmailModal({
   const unsentCount = candidates.filter((c) => !c.email_sent).length;
 
   const [targetMode, setTargetMode] = useState<'unsent' | 'all'>('unsent');
-  const [templateType, setTemplateType] = useState<TemplateType>('decision_pending');
+  const [templateType, setTemplateType] = useState<TemplateType>('auto');
   const [customSubject, setCustomSubject] = useState('');
   const [customHeadline, setCustomHeadline] = useState('');
 
@@ -63,9 +63,25 @@ export function BatchEmailModal({
       ? candidates.filter((c) => !c.email_sent)
       : candidates;
 
+  const acceptedInTarget = targetList.filter((c) => c.status === 'accepted').length;
+  const rejectedInTarget = targetList.filter((c) => c.status === 'rejected').length;
+  const pendingInTarget = targetList.filter((c) => c.status === 'decision_pending').length;
+
   const activeTemplate =
-    templateType === 'status_update'
+    templateType === 'accepted'
+      ? EMAIL_TEMPLATES.accepted
+      : templateType === 'rejected'
+      ? EMAIL_TEMPLATES.rejected
+      : templateType === 'status_update'
       ? EMAIL_TEMPLATES.status_update
+      : templateType === 'auto'
+      ? {
+          name: 'Smart Match Candidate Status (Recommended)',
+          subject: 'Auto-matched to candidate status (Offer / Decision / Review)',
+          headline: 'Official Recruitment Notification',
+          buttonText: 'View Candidate Portal',
+          defaultMessage: '',
+        }
       : EMAIL_TEMPLATES.decision_pending;
 
   const handleStartBatch = async () => {
@@ -251,20 +267,99 @@ export function BatchEmailModal({
                     </p>
                   </button>
                 </div>
+
+                {/* Target Breakdown Stats */}
+                <div className="flex flex-wrap items-center gap-2.5 mt-2.5 px-3.5 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-[11px] text-slate-400">
+                  <span className="font-medium text-slate-300">Recipient Breakdown:</span>
+                  <span className="text-emerald-400 font-semibold">{acceptedInTarget} Accepted</span>
+                  <span>&bull;</span>
+                  <span className="text-rose-400 font-semibold">{rejectedInTarget} Rejected</span>
+                  <span>&bull;</span>
+                  <span className="text-amber-400 font-semibold">{pendingInTarget} Decision Pending</span>
+                </div>
               </div>
 
               {/* Template Selection */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2">
-                  Email Template:
+                  Select Email Template:
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Option 1: Smart Match (Auto) */}
+                  <button
+                    type="button"
+                    onClick={() => setTemplateType('auto')}
+                    className={`sm:col-span-2 p-3.5 rounded-2xl border text-left transition-all ${
+                      templateType === 'auto'
+                        ? 'border-cyan-400 bg-gradient-to-r from-cyan-950/50 to-blue-950/50 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-950/50'
+                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-cyan-400" />
+                        <span className="text-xs font-bold text-white">
+                          Smart Match Candidate Status (Recommended)
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300">
+                        Auto Match
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-1">
+                      Dispatches matching template for each candidate: <strong>Offer letter</strong> to Accepted, <strong>Application Decision</strong> to Rejected, and <strong>Under Review notice</strong> to Decision Pending.
+                    </p>
+                  </button>
+
+                  {/* Option 2: Offer & Acceptance */}
+                  <button
+                    type="button"
+                    onClick={() => setTemplateType('accepted')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      templateType === 'accepted'
+                        ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500/50'
+                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-white">
+                        Offer & Acceptance (Congratulations)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Sends congratulations offer and onboarding next steps to all selected.
+                    </p>
+                  </button>
+
+                  {/* Option 3: Rejected / Not Selected */}
+                  <button
+                    type="button"
+                    onClick={() => setTemplateType('rejected')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      templateType === 'rejected'
+                        ? 'border-rose-500 bg-rose-950/40 ring-1 ring-rose-500/50'
+                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-rose-400" />
+                      <span className="text-xs font-bold text-white">
+                        Application Decision (Not Selected)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Sends polite notice thanking candidate and encouraging future applications.
+                    </p>
+                  </button>
+
+                  {/* Option 4: Decision Pending */}
                   <button
                     type="button"
                     onClick={() => setTemplateType('decision_pending')}
                     className={`p-3.5 rounded-2xl border text-left transition-all ${
                       templateType === 'decision_pending'
-                        ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/50'
+                        ? 'border-amber-500 bg-amber-950/40 ring-1 ring-amber-500/50'
                         : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
                     }`}
                   >
@@ -275,10 +370,11 @@ export function BatchEmailModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Welcome email containing private tracking link and notice that interview is completed.
+                      Welcome email containing private tracking link and review ongoing notice.
                     </p>
                   </button>
 
+                  {/* Option 5: General Status Update */}
                   <button
                     type="button"
                     onClick={() => setTemplateType('status_update')}
@@ -289,13 +385,13 @@ export function BatchEmailModal({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-cyan-400" />
+                      <Mail className="h-4 w-4 text-cyan-400" />
                       <span className="text-xs font-bold text-white">
-                        Status Decision Update
+                        General Status Decision Update
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Notifies candidates that a decision has been made and invites them to view results.
+                      Notifies candidates that a decision has been updated and invites them to check.
                     </p>
                   </button>
                 </div>

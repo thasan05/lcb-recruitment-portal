@@ -11,8 +11,41 @@ interface Props {
 }
 
 export function CandidateStatusCard({ candidate }: Props) {
+  const [liveCandidate, setLiveCandidate] = useState<CandidatePublicView>(candidate);
   const [copied, setCopied] = useState(false);
-  const effectiveStatus = normalizeCandidateStatus(candidate.status);
+
+  // Sync state if candidate prop changes
+  React.useEffect(() => {
+    setLiveCandidate(candidate);
+  }, [candidate]);
+
+  // Real-time synchronization: Fetch live status immediately on client load
+  React.useEffect(() => {
+    const pathParts = typeof window !== 'undefined' ? window.location.pathname.split('/') : [];
+    const tokenFromUrl = pathParts[pathParts.length - 1];
+    const targetToken = candidate.canonicalToken || tokenFromUrl;
+    if (targetToken && /^[a-f0-9]{12,64}$/i.test(targetToken)) {
+      fetch(`/api/candidate/${targetToken}?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.candidate?.status) {
+            setLiveCandidate((prev) => ({
+              ...prev,
+              status: data.candidate.status,
+              name: data.candidate.name || prev.name,
+              updated_at: data.candidate.updated_at || prev.updated_at,
+              is_expired: data.candidate.is_expired ?? prev.is_expired,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [candidate.canonicalToken]);
+
+  const effectiveStatus = normalizeCandidateStatus(liveCandidate.status);
   const meta = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.decision_pending;
   const isAccepted = effectiveStatus === 'accepted';
   const isPending = effectiveStatus === 'decision_pending';
@@ -55,7 +88,7 @@ export function CandidateStatusCard({ candidate }: Props) {
 
   const steps = getSteps();
 
-  if (candidate.is_expired) {
+  if (liveCandidate.is_expired) {
     return (
       <div className="w-full max-w-2xl mx-auto px-2 sm:px-0">
         <div className="glass-panel rounded-3xl border border-white/10 p-6 sm:p-10 shadow-2xl relative overflow-hidden animate-scale-in">
@@ -95,7 +128,7 @@ export function CandidateStatusCard({ candidate }: Props) {
               Recruitment Cycle Concluded
             </h2>
             <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-              Hello, <strong className="text-white">{candidate.name}</strong>. This private candidate tracking link has reached its 90-day security threshold and is now archived.
+              Hello, <strong className="text-white">{liveCandidate.name}</strong>. This private candidate tracking link has reached its 90-day security threshold and is now archived.
             </p>
 
             {/* Archived Status Info */}
@@ -204,7 +237,7 @@ export function CandidateStatusCard({ candidate }: Props) {
             Candidate Evaluation
           </p>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 tracking-tight">
-            Hello, {candidate.name}
+            Hello, {liveCandidate.name}
           </h2>
 
           {/* Status Banner */}
@@ -352,7 +385,7 @@ export function CandidateStatusCard({ candidate }: Props) {
         <div className="mt-10 pt-6 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4 relative z-10">
           <div className="flex items-center gap-2 text-slate-400">
             <ShieldCheck className="h-4 w-4 text-cyan-400" />
-            <span>Official LCB Notification • Updated {formatLastUpdated(candidate.updated_at)}</span>
+            <span>Official LCB Notification • Updated {formatLastUpdated(liveCandidate.updated_at)}</span>
           </div>
 
           <button

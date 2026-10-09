@@ -43,11 +43,23 @@ export async function sendCandidateStatusEmail({
   const cleanToken = (secureToken || '').trim().slice(0, 24);
   const statusUrl = `${baseUrl.replace(/\/$/, '')}/status/${cleanToken}`;
 
-  // Pick template defaults
-  const activeTemplate =
-    templateType === 'status_update'
-      ? EMAIL_TEMPLATES.status_update
-      : EMAIL_TEMPLATES.decision_pending;
+  // Resolve active template based on templateType and candidateStatus
+  let resolvedType: 'decision_pending' | 'accepted' | 'rejected' | 'status_update' = 'decision_pending';
+  if (templateType === 'accepted') {
+    resolvedType = 'accepted';
+  } else if (templateType === 'rejected') {
+    resolvedType = 'rejected';
+  } else if (templateType === 'status_update') {
+    resolvedType = 'status_update';
+  } else if (templateType === 'auto' || !templateType) {
+    if (candidateStatus === 'accepted') resolvedType = 'accepted';
+    else if (candidateStatus === 'rejected') resolvedType = 'rejected';
+    else resolvedType = 'decision_pending';
+  } else {
+    resolvedType = 'decision_pending';
+  }
+
+  const activeTemplate = EMAIL_TEMPLATES[resolvedType] || EMAIL_TEMPLATES.decision_pending;
 
   const finalSubject = subject && subject.trim() ? subject.trim() : activeTemplate.subject;
   const finalHeadline = headline && headline.trim() ? headline.trim() : activeTemplate.headline;

@@ -215,11 +215,22 @@ export async function getCandidateBySecureToken(
   // 1. Query Supabase FIRST if configured (primary authoritative database)
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
-      const { data: allRows, error } = await supabaseAdmin.from('candidates').select('*');
+      const { data: allRows, error } = await supabaseAdmin
+        .from('candidates')
+        .select('*')
+        .order('last_updated', { ascending: false });
       if (!error && allRows) {
         for (const row of allRows) {
           const canonical = ensureHashedToken(row.secure_token, row.id);
           if (matchesCandidate(row.secure_token, row.id)) {
+            // Synchronize memory store in-place so fallback is always fresh
+            const memIdx = memoryCandidates.findIndex((c) => c.id === row.id || (row.email && c.email.toLowerCase() === row.email.toLowerCase()));
+            if (memIdx !== -1) {
+              memoryCandidates[memIdx].status = normalizeCandidateStatus(row.status);
+              memoryCandidates[memIdx].name = row.full_name || row.name || memoryCandidates[memIdx].name;
+              memoryCandidates[memIdx].email = row.email || memoryCandidates[memIdx].email;
+              memoryCandidates[memIdx].updated_at = row.last_updated || row.updated_at || new Date().toISOString();
+            }
             const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
             return toPublicView(row, canonical, !isExactCanonical);
           }
@@ -295,12 +306,25 @@ export async function updateCandidateDetails(
       if (cleanEmail) patchObj.email = cleanEmail;
       if (normStatus) patchObj.status = normStatus;
 
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from('candidates')
         .update(patchObj)
         .eq('id', id)
         .select('*')
         .maybeSingle();
+
+      if ((!data || error) && cleanEmail) {
+        const emailUpdate = await supabaseAdmin
+          .from('candidates')
+          .update(patchObj)
+          .eq('email', cleanEmail)
+          .select('*')
+          .maybeSingle();
+        if (!emailUpdate.error && emailUpdate.data) {
+          data = emailUpdate.data;
+          error = null;
+        }
+      }
 
       if (!error && data) {
         const norm = normalizeCandidateRow(data);

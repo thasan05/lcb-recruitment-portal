@@ -22,7 +22,19 @@ export const isSupabaseConfigured = (): boolean => {
 
 // Client for candidate and anonymous read requests (strictly anon key, never service-role)
 export const supabaseClient = isSupabaseConfigured() && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      global: {
+        fetch: (url, options = {}) =>
+          fetch(url, {
+            ...options,
+            cache: 'no-store',
+          }),
+      },
+    })
   : null;
 
 // Server-side admin client using service role key (bypasses RLS for HR administration).
@@ -33,6 +45,13 @@ export const supabaseAdmin =
         auth: {
           autoRefreshToken: false,
           persistSession: false,
+        },
+        global: {
+          fetch: (url, options = {}) =>
+            fetch(url, {
+              ...options,
+              cache: 'no-store',
+            }),
         },
       })
     : null;
