@@ -6,7 +6,7 @@ const supabaseUrl =
 const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  'sb_publishable_vUy0lgA8VexV6fQpQy_xXQ_1fPqUPt2';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoam5kcWZnZGVidW9pd2R4dHRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NTc5MzUsImV4cCI6MjEwNjQzMzkzNX0.KuQonlxEBnBDQDh04w7BP_JKJMh0TmAHfWYZ1j9588s';
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SECRET_KEY ||
