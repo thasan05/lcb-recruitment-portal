@@ -140,7 +140,7 @@ export function SimpleHRConsole() {
       setLoading(true);
       const res = await fetch(`/api/admin/candidates${search ? `?q=${encodeURIComponent(search)}` : ''}`);
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/';
         return;
       }
       const data = await res.json();
@@ -161,7 +161,7 @@ export function SimpleHRConsole() {
   // Handle Logout
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/admin/login';
+    window.location.href = '/';
   };
 
   // Intelligent column & multi-sheet detection for Excel / CSV (supports Google Sheets Username, Full Name :, etc.)

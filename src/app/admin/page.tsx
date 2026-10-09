@@ -9,7 +9,7 @@ export const metadata = {
 export default async function AdminPage() {
   const isAuth = await checkAdminAuth();
   if (!isAuth) {
-    redirect('/admin/login');
+    redirect('/');
   }
 
   return <SimpleHRConsole />;

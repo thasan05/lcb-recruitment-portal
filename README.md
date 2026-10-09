@@ -72,7 +72,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# HR Admin Credentials
+# HR Admin Credentials (Username & Password)
+ADMIN_USERNAME=admin
 ADMIN_EMAIL=hr@linkedincommunitybangladesh.com
 ADMIN_PASSWORD=lcb_recruitment_2026!
 ADMIN_SESSION_SECRET=lcb_dev_secret_session_key_2026_recruitment
@@ -140,9 +141,10 @@ Verify that all static and dynamic routes compile cleanly.
 2. In Vercel, import `lcb-recruitment-portal`.
 3. Set the Environment Variables:
    - `NEXT_PUBLIC_APP_URL` $\rightarrow$ Your production domain (e.g. `https://recruitment.linkedincommunitybangladesh.com`)
-   - `ADMIN_EMAIL` $\rightarrow$ Your production HR admin email
+   - `ADMIN_USERNAME` $\rightarrow$ Your production HR admin username (e.g. `admin` or your preferred username)
    - `ADMIN_PASSWORD` $\rightarrow$ A strong production password
    - `ADMIN_SESSION_SECRET` $\rightarrow$ A random 32+ character string
+   - `ADMIN_EMAIL` (optional fallback) $\rightarrow$ Your HR admin email
    - `NEXT_PUBLIC_SUPABASE_URL` (if using Supabase)
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (if using Supabase)
    - `SUPABASE_SERVICE_ROLE_KEY` (if using Supabase)

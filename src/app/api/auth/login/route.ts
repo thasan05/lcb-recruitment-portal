@@ -3,23 +3,25 @@ import { verifyAdminCredentials, generateSessionToken, ADMIN_COOKIE_NAME } from 
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+    const username = (body.username ?? body.email ?? body.user ?? '').toString().trim();
+    const password = (body.password ?? '').toString();
 
-    if (!email || !password) {
+    if (!username || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Username and password are required' },
         { status: 400 }
       );
     }
 
-    if (!verifyAdminCredentials(email, password)) {
+    if (!verifyAdminCredentials(username, password)) {
       return NextResponse.json(
-        { error: 'Invalid admin credentials' },
+        { error: 'Invalid username or password' },
         { status: 401 }
       );
     }
 
-    const token = generateSessionToken();
+    const token = generateSessionToken(username);
     const response = NextResponse.json({ success: true, message: 'Authenticated successfully' });
 
     response.cookies.set({
@@ -40,3 +42,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
