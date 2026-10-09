@@ -18,17 +18,19 @@ export const isSupabaseConfigured = (): boolean => {
   );
 };
 
-// Client for candidate and anonymous read requests
-export const supabaseClient = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseAnonKey || supabaseServiceRoleKey)
+// Client for candidate and anonymous read requests (strictly anon key, never service-role)
+export const supabaseClient = isSupabaseConfigured() && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Server-side admin client using service role key (bypasses RLS for HR administration)
-export const supabaseAdmin = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
-  : null;
+// Server-side admin client using service role key (bypasses RLS for HR administration).
+// Strictly available in server-side execution environments.
+export const supabaseAdmin =
+  typeof window === 'undefined' && isSupabaseConfigured()
+    ? createClient(supabaseUrl, supabaseServiceRoleKey || supabaseAnonKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null;

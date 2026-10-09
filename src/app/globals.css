@@ -21,42 +21,72 @@ body {
 
 /* Glass Surface Utilities */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 17, 32, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card-hover {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .glass-card-hover:hover {
-  border-color: rgba(10, 102, 194, 0.4);
-  box-shadow: 0 10px 30px -10px rgba(10, 102, 194, 0.2);
-  transform: translateY(-2px);
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: 0 16px 40px -12px rgba(10, 102, 194, 0.35);
+  transform: translateY(-3px);
 }
 
-/* Gradient accents */
-.text-gradient-hero {
-  background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.7) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+/* Cyber Grid Background */
+.bg-grid-cyber {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 60%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 60%, transparent 100%);
 }
 
-.text-gradient-brand {
-  background: linear-gradient(90deg, #38bdf8 0%, #0a66c2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.bg-radial-gradient {
+  background: radial-gradient(circle at 50% 25%, rgba(10, 102, 194, 0.18) 0%, rgba(4, 6, 20, 0) 65%);
 }
 
-/* Shimmer badge animation */
+/* Ambient Animated Glowing Blobs */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-16px) scale(1.05);
+  }
+}
+
+@keyframes floatReverse {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(16px) scale(0.96);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.35;
+    filter: blur(48px);
+  }
+  50% {
+    opacity: 0.65;
+    filter: blur(64px);
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -66,15 +96,88 @@ body {
   }
 }
 
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes celebrationBurst {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 7s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 8s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-celebrate {
+  animation: celebrationBurst 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .shimmer-badge {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.03) 0%,
-    rgba(255, 255, 255, 0.12) 50%,
+    rgba(56, 189, 248, 0.18) 50%,
     rgba(255, 255, 255, 0.03) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 4s infinite linear;
+}
+
+.text-gradient-hero {
+  background: linear-gradient(180deg, #ffffff 0%, rgba(226, 232, 240, 0.82) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #38bdf8 0%, #0a66c2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Custom scrollbars */

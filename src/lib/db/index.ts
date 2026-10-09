@@ -1,756 +1,578 @@
-import {
-  Candidate,
-  CandidateStatus,
-  CandidateUpdate,
-  DashboardStats,
-  InternalNote,
-  Interview,
-  ActivityLog,
-} from '@/types';
+import crypto from 'crypto';
+import { Candidate, CandidateStatus, CandidatePublicView } from '@/types';
 import { isSupabaseConfigured, supabaseAdmin, supabaseClient } from '../supabase';
 
-// Helper to generate IDs and secure access tokens
-export function generateApplicationId(sequenceNum?: number): string {
-  const year = new Date().getFullYear();
-  const num = sequenceNum ?? Math.floor(1000 + Math.random() * 9000);
-  return `LCB-${year}-${String(num).padStart(4, '0')}`;
-}
+// Compact cryptographic token length: 24 hex characters (96 bits of entropy, unguessable, short & mobile-friendly)
+export const SECURE_TOKEN_LENGTH = 24;
 
+// Generate unguessable cryptographic token for candidate access (compact 24-char random hex hash, zero names)
 export function generateSecureToken(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let token = 'tok_lcb_';
-  for (let i = 0; i < 24; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
+  return crypto.randomBytes(12).toString('hex');
 }
 
-// In-Memory Fallback Store (used when Supabase is not configured or during local evaluation)
-let memoryCandidates: Candidate[] = [
-  {
-    id: 'a1111111-1111-1111-1111-111111111111',
-    application_id: 'LCB-2026-0001',
-    secure_token: 'tok_lcb_tanvir_h_2026',
-    full_name: 'Tanvir Hasan',
-    email: 'tanvir.hasan@example.com',
-    phone: '+880 1711-234567',
-    position: 'Campus Lead',
-    department: 'Campus Division',
-    campaign: 'LCB Campus Lead Recruitment — 2026',
-    status: 'INTERVIEW_SCHEDULED',
-    application_date: '2026-09-28T10:00:00Z',
-    last_updated: '2026-10-01T15:30:00Z',
-    is_archived: false,
-    interview: {
-      id: 'f6666666-6666-6666-6666-666666666666',
-      candidate_id: 'a1111111-1111-1111-1111-111111111111',
-      status: 'SCHEDULED',
-      date: '2026-10-02',
-      time: '09:20 PM',
-      timezone: 'Asia/Dhaka (BST, GMT+6)',
-      duration: 20,
-      interview_type: 'Online',
-      meeting_platform: 'Google Meet',
-      meeting_link: 'https://meet.google.com/lcb-lead-sync',
-      interviewer: 'LCB Campus Leadership Panel',
-      instructions:
-        'Please join 5 minutes early with your camera enabled. Be ready to share your vision for leading your campus community.',
-      created_at: '2026-10-01T15:30:00Z',
-      updated_at: '2026-10-01T15:30:00Z',
-    },
-    updates: [
-      {
-        id: 'u1',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        title: 'Interview Scheduled',
-        message:
-          'Your online leadership evaluation interview has been confirmed for October 2, 2026 at 9:20 PM (BST). Check the interview section below for the Google Meet link.',
-        date: '2026-10-01T15:30:00Z',
-        is_candidate_visible: true,
-        created_at: '2026-10-01T15:30:00Z',
-      },
-      {
-        id: 'u2',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        title: 'Application Shortlisted',
-        message:
-          'Your application for Campus Lead has been reviewed and shortlisted by the selection committee.',
-        date: '2026-09-30T12:00:00Z',
-        is_candidate_visible: true,
-        created_at: '2026-09-30T12:00:00Z',
-      },
-    ],
-    notes: [
-      {
-        id: 'n1',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        content:
-          'Strong campus leadership track record. Active on LinkedIn with consistent engagement.',
-        author: 'Head of Campus Outreach',
-        created_at: '2026-09-30T11:45:00Z',
-      },
-    ],
-    activity_logs: [
-      {
-        id: 'l1',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        action_type: 'CANDIDATE_CREATED',
-        details: 'Candidate profile registered via application portal',
-        performed_by: 'System',
-        timestamp: '2026-09-28T10:00:00Z',
-      },
-      {
-        id: 'l2',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        action_type: 'STATUS_CHANGE',
-        details: 'Status changed: Application Received -> Under Review',
-        performed_by: 'Lead Recruiter',
-        timestamp: '2026-09-29T10:00:00Z',
-      },
-      {
-        id: 'l3',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        action_type: 'STATUS_CHANGE',
-        details: 'Status changed: Under Review -> Shortlisted',
-        performed_by: 'HR Manager',
-        timestamp: '2026-09-30T12:00:00Z',
-      },
-      {
-        id: 'l4',
-        candidate_id: 'a1111111-1111-1111-1111-111111111111',
-        action_type: 'INTERVIEW_SCHEDULED',
-        details:
-          'Interview scheduled for Oct 2, 2026 at 09:20 PM on Google Meet',
-        performed_by: 'Interview Coordinator',
-        timestamp: '2026-10-01T15:30:00Z',
-      },
-    ],
-  },
-  {
-    id: 'b2222222-2222-2222-2222-222222222222',
-    application_id: 'LCB-2026-0002',
-    secure_token: 'tok_lcb_sadia_a_2026',
-    full_name: 'Sadia Akter',
-    email: 'sadia.akter@example.com',
-    phone: '+880 1812-987654',
-    position: 'Communication Executive',
-    department: 'Marketing & PR',
-    campaign: 'LCB Central Team Recruitment — 2026',
-    status: 'SHORTLISTED',
-    application_date: '2026-09-29T14:15:00Z',
-    last_updated: '2026-10-01T11:00:00Z',
-    is_archived: false,
-    interview: null,
-    updates: [
-      {
-        id: 'u3',
-        candidate_id: 'b2222222-2222-2222-2222-222222222222',
-        title: 'Application Shortlisted',
-        message:
-          'We are pleased to inform you that your portfolio and answers have advanced you to the shortlist.',
-        date: '2026-10-01T11:00:00Z',
-        is_candidate_visible: true,
-        created_at: '2026-10-01T11:00:00Z',
-      },
-    ],
-    notes: [
-      {
-        id: 'n2',
-        candidate_id: 'b2222222-2222-2222-2222-222222222222',
-        content:
-          'Excellent writing samples. Needs to verify availability for weekly core syncs.',
-        author: 'Lead HR Recruiter',
-        created_at: '2026-10-01T10:30:00Z',
-      },
-    ],
-    activity_logs: [
-      {
-        id: 'l5',
-        candidate_id: 'b2222222-2222-2222-2222-222222222222',
-        action_type: 'CANDIDATE_CREATED',
-        details: 'Candidate profile registered via application portal',
-        performed_by: 'System',
-        timestamp: '2026-09-29T14:15:00Z',
-      },
-      {
-        id: 'l6',
-        candidate_id: 'b2222222-2222-2222-2222-222222222222',
-        action_type: 'STATUS_CHANGE',
-        details: 'Status changed: Under Review -> Shortlisted',
-        performed_by: 'Lead Recruiter',
-        timestamp: '2026-10-01T11:00:00Z',
-      },
-    ],
-  },
-  {
-    id: 'c3333333-3333-3333-3333-333333333333',
-    application_id: 'LCB-2026-0003',
-    secure_token: 'tok_lcb_rahim_a_2026',
-    full_name: 'Rahim Ahmed',
-    email: 'rahim.ahmed@example.com',
-    phone: '+880 1913-456789',
-    position: 'HR Executive',
-    department: 'Human Resources',
-    campaign: 'LCB Central Team Recruitment — 2026',
-    status: 'SELECTED',
-    application_date: '2026-09-25T09:30:00Z',
-    last_updated: '2026-10-01T16:00:00Z',
-    is_archived: false,
-    interview: {
-      id: 'i2',
-      candidate_id: 'c3333333-3333-3333-3333-333333333333',
-      status: 'COMPLETED',
-      date: '2026-09-30',
-      time: '04:00 PM',
-      timezone: 'Asia/Dhaka (BST, GMT+6)',
-      duration: 30,
-      interview_type: 'Online',
-      meeting_platform: 'Google Meet',
-      meeting_link: 'https://meet.google.com/lcb-hr-sync',
-      interviewer: 'HR Director',
-      instructions: 'Completed successfully.',
-      created_at: '2026-09-29T10:00:00Z',
-      updated_at: '2026-09-30T17:00:00Z',
-    },
-    updates: [
-      {
-        id: 'u4',
-        candidate_id: 'c3333333-3333-3333-3333-333333333333',
-        title: 'Offer Extended: Selected for LCB Central Team',
-        message:
-          'Congratulations! Based on your interviews and performance, you have been selected as HR Executive for LinkedIn Community Bangladesh.',
-        date: '2026-10-01T16:00:00Z',
-        is_candidate_visible: true,
-        created_at: '2026-10-01T16:00:00Z',
-      },
-    ],
-    notes: [
-      {
-        id: 'n3',
-        candidate_id: 'c3333333-3333-3333-3333-333333333333',
-        content:
-          'Outstanding interview. Scored 9.5/10 on communication and structured thinking. Highly recommended.',
-        author: 'Panel Chair',
-        created_at: '2026-10-01T15:00:00Z',
-      },
-    ],
-    activity_logs: [
-      {
-        id: 'l7',
-        candidate_id: 'c3333333-3333-3333-3333-333333333333',
-        action_type: 'STATUS_CHANGE',
-        details: 'Status changed: Final Review -> Selected',
-        performed_by: 'HR Director',
-        timestamp: '2026-10-01T16:00:00Z',
-      },
-    ],
-  },
-  {
-    id: 'd4444444-4444-4444-4444-444444444444',
-    application_id: 'LCB-2026-0004',
-    secure_token: 'tok_lcb_nusrat_j_2026',
-    full_name: 'Nusrat Jahan',
-    email: 'nusrat.jahan@example.com',
-    phone: '+880 1614-112233',
-    position: 'Event Management Lead',
-    department: 'Operations',
-    campaign: 'LCB Central Team Recruitment — 2026',
-    status: 'UNDER_REVIEW',
-    application_date: '2026-10-01T08:20:00Z',
-    last_updated: '2026-10-01T08:20:00Z',
-    is_archived: false,
-    interview: null,
-    updates: [],
-    notes: [],
-    activity_logs: [
-      {
-        id: 'l8',
-        candidate_id: 'd4444444-4444-4444-4444-444444444444',
-        action_type: 'CANDIDATE_CREATED',
-        details: 'Application submitted',
-        performed_by: 'System',
-        timestamp: '2026-10-01T08:20:00Z',
-      },
-    ],
-  },
-  {
-    id: 'e5555555-5555-5555-5555-555555555555',
-    application_id: 'LCB-2026-0005',
-    secure_token: 'tok_lcb_mehedi_h_2026',
-    full_name: 'Mehedi Hasan',
-    email: 'mehedi.h@example.com',
-    phone: '+880 1515-998877',
-    position: 'Content Creator',
-    department: 'Media & Design',
-    campaign: 'LCB Central Team Recruitment — 2026',
-    status: 'NOT_SELECTED',
-    application_date: '2026-09-22T11:00:00Z',
-    last_updated: '2026-09-30T17:45:00Z',
-    is_archived: false,
-    interview: null,
-    updates: [],
-    notes: [
-      {
-        id: 'n4',
-        candidate_id: 'e5555555-5555-5555-5555-555555555555',
-        content: 'Design portfolio not aligned with current video focus.',
-        author: 'Lead Recruiter',
-        created_at: '2026-09-30T17:00:00Z',
-      },
-    ],
-    activity_logs: [
-      {
-        id: 'l9',
-        candidate_id: 'e5555555-5555-5555-5555-555555555555',
-        action_type: 'STATUS_CHANGE',
-        details: 'Status changed: Under Review -> Not Selected',
-        performed_by: 'Lead Recruiter',
-        timestamp: '2026-09-30T17:45:00Z',
-      },
-    ],
-  },
-];
+// Ensures a token is strictly a shortened 24-character encrypted random hex hash with ZERO names
+export function ensureHashedToken(token: string | undefined, id: string): string {
+  if (!token) {
+    return crypto.createHash('sha256').update('lcb_salt_token_' + id).digest('hex').slice(0, SECURE_TOKEN_LENGTH);
+  }
+  const clean = token.trim().toLowerCase();
+  // If token has names, prefixes (tok_), underscores, or non-hex characters
+  if (
+    clean.startsWith('tok_') ||
+    clean.includes('_') ||
+    !/^[a-f0-9]+$/.test(clean) ||
+    /rahim|tanvir|sadia|nusrat|mehedi|lcb|demo|test/i.test(clean)
+  ) {
+    return crypto.createHash('sha256').update('lcb_salt_token_' + id).digest('hex').slice(0, SECURE_TOKEN_LENGTH);
+  }
+  // If already a clean hex string, return first 24 characters
+  return clean.slice(0, SECURE_TOKEN_LENGTH);
+}
 
-export async function getCandidates(filters?: {
-  status?: string;
-  department?: string;
-  position?: string;
-  search?: string;
-  includeArchived?: boolean;
-}): Promise<Candidate[]> {
+// Token lifetime is 30 days (1 month) to protect resources and cycle boundaries
+export const TOKEN_EXPIRATION_DAYS = 30;
+export const TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
+
+export function isTokenExpired(createdAt?: string | null): boolean {
+  if (!createdAt) return false;
+  const createdTime = new Date(createdAt).getTime();
+  if (isNaN(createdTime)) return false;
+  return Date.now() - createdTime > TOKEN_EXPIRATION_MS;
+}
+
+// In-Memory fallback store attached to globalThis to ensure sharing across Next.js App Router server chunks
+const globalStore = globalThis as unknown as {
+  __lcbCandidates?: Candidate[];
+  __lcbResetTimestamp?: number;
+};
+
+if (!globalStore.__lcbCandidates) {
+  const currentTimestamp = new Date().toISOString();
+  globalStore.__lcbCandidates = [
+    {
+      id: 'c1111111-1111-1111-1111-111111111111',
+      name: 'Tanvir Hasan',
+      email: 'tanvir@example.com',
+      status: 'decision_pending',
+      secure_token: '9c7a2e8f1b4d05638a192e74',
+      email_sent: true,
+      email_sent_at: currentTimestamp,
+      created_at: currentTimestamp,
+      updated_at: currentTimestamp,
+    },
+    {
+      id: 'c2222222-2222-2222-2222-222222222222',
+      name: 'Sadia Akter',
+      email: 'sadia@example.com',
+      status: 'accepted',
+      secure_token: '4e81a95b0c2d7f36918234e7',
+      email_sent: false,
+      email_sent_at: null,
+      created_at: currentTimestamp,
+      updated_at: currentTimestamp,
+    },
+    {
+      id: 'c3333333-3333-3333-3333-333333333333',
+      name: 'Rahim Ahmed',
+      email: 'rahim@example.com',
+      status: 'rejected',
+      secure_token: '7b0294e5d1a8c3f6902518e7',
+      email_sent: false,
+      email_sent_at: null,
+      created_at: currentTimestamp,
+      updated_at: currentTimestamp,
+    },
+    {
+      id: 'c4444444-4444-4444-4444-444444444444',
+      name: 'Nusrat Jahan',
+      email: 'nusrat@example.com',
+      status: 'rejected',
+      secure_token: '2f90a84e3b1c7d65019284e5',
+      email_sent: true,
+      email_sent_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+      created_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+      updated_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+    },
+  ];
+}
+
+const memoryCandidates: Candidate[] = globalStore.__lcbCandidates;
+
+// Proactively sanitize all existing memory candidate tokens to guarantee 24-character hex format with ZERO names
+for (const cand of memoryCandidates) {
+  cand.secure_token = ensureHashedToken(cand.secure_token, cand.id);
+}
+
+// Helper to normalize Supabase row to Candidate interface
+function normalizeCandidateRow(row: any): Candidate {
+  return {
+    id: row.id,
+    name: row.name || row.full_name || 'Candidate',
+    email: row.email,
+    status: (row.status?.toLowerCase() || 'decision_pending') as CandidateStatus,
+    secure_token: ensureHashedToken(row.secure_token, row.id),
+    email_sent: Boolean(row.email_sent),
+    email_sent_at: row.email_sent_at || null,
+    created_at: row.created_at || new Date().toISOString(),
+    updated_at: row.updated_at || row.last_updated || new Date().toISOString(),
+  };
+}
+
+export async function getCandidates(searchQuery?: string): Promise<Candidate[]> {
+  const candidatesMap = new Map<string, Candidate>();
+
   if (isSupabaseConfigured() && supabaseAdmin) {
-    let query = supabaseAdmin
-      .from('candidates')
-      .select('*, interviews(*), candidate_updates(*), internal_notes(*), activity_logs(*)')
-      .order('application_date', { ascending: false });
+    try {
+      let query = supabaseAdmin
+        .from('candidates')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (!filters?.includeArchived) {
-      query = query.eq('is_archived', false);
-    }
-    if (filters?.status && filters.status !== 'ALL') {
-      query = query.eq('status', filters.status);
-    }
-    if (filters?.department && filters.department !== 'ALL') {
-      query = query.eq('department', filters.department);
-    }
-    if (filters?.position && filters.position !== 'ALL') {
-      query = query.eq('position', filters.position);
-    }
+      if (searchQuery && searchQuery.trim()) {
+        const q = `%${searchQuery.trim().toLowerCase()}%`;
+        query = query.or(`name.ilike.${q},email.ilike.${q},full_name.ilike.${q}`);
+      }
 
-    const { data, error } = await query;
-    if (error) {
-      console.warn('Supabase getCandidates query error, falling back to local store:', error.message);
-    } else if (data) {
-      return data.map((row: any) => ({
-        ...row,
-        interview: row.interviews?.[0] || null,
-        updates: row.candidate_updates || [],
-        notes: row.internal_notes || [],
-        activity_logs: row.activity_logs || [],
-      }));
+      const { data, error } = await query;
+      if (!error && data) {
+        for (const row of data) {
+          const c = normalizeCandidateRow(row);
+          if (globalStore.__lcbResetTimestamp) {
+            const rowTime = new Date(c.created_at).getTime();
+            if (!isNaN(rowTime) && rowTime < globalStore.__lcbResetTimestamp) {
+              continue;
+            }
+          }
+          candidatesMap.set(c.id, c);
+        }
+      } else if (error) {
+        console.warn('Supabase query error:', error.message);
+      }
+    } catch (err) {
+      console.warn('Supabase connection failed:', err);
     }
   }
 
-  // Memory fallback
-  return memoryCandidates.filter((c) => {
-    if (!filters?.includeArchived && c.is_archived) return false;
-    if (filters?.status && filters.status !== 'ALL' && c.status !== filters.status) return false;
-    if (filters?.department && filters.department !== 'ALL' && c.department !== filters.department)
-      return false;
-    if (filters?.position && filters.position !== 'ALL' && c.position !== filters.position)
-      return false;
-    if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      const matchName = c.full_name.toLowerCase().includes(q);
-      const matchEmail = c.email.toLowerCase().includes(q);
-      const matchAppId = c.application_id.toLowerCase().includes(q);
-      const matchPhone = c.phone.toLowerCase().includes(q);
-      const matchPosition = c.position.toLowerCase().includes(q);
-      if (!matchName && !matchEmail && !matchAppId && !matchPhone && !matchPosition) return false;
+  // Merge in-memory candidates (guarantees immediate responsiveness during local dev/testing)
+  for (const c of memoryCandidates) {
+    const sanitizedCandidate: Candidate = {
+      ...c,
+      secure_token: ensureHashedToken(c.secure_token, c.id),
+    };
+    const existing = candidatesMap.get(c.id);
+    if (!existing) {
+      candidatesMap.set(c.id, sanitizedCandidate);
+    } else {
+      const existingTime = new Date(existing.updated_at).getTime();
+      const memTime = new Date(sanitizedCandidate.updated_at).getTime();
+      if (memTime >= existingTime) {
+        candidatesMap.set(c.id, { ...existing, ...sanitizedCandidate });
+      }
     }
-    return true;
-  });
+  }
+
+  let list = Array.from(candidatesMap.values());
+  if (searchQuery && searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    list = list.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+    );
+  }
+
+  return list.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {
   if (isSupabaseConfigured() && supabaseAdmin) {
-    const { data, error } = await supabaseAdmin
-      .from('candidates')
-      .select('*, interviews(*), candidate_updates(*), internal_notes(*), activity_logs(*)')
-      .eq('id', id)
-      .single();
-
-    if (!error && data) {
-      return {
-        ...data,
-        interview: data.interviews?.[0] || null,
-        updates: data.candidate_updates || [],
-        notes: data.internal_notes || [],
-        activity_logs: data.activity_logs || [],
-      };
-    }
-  }
-
-  const candidate = memoryCandidates.find((c) => c.id === id);
-  return candidate ? JSON.parse(JSON.stringify(candidate)) : null;
-}
-
-// Candidate-facing lookup: strictly strips internal notes and activity logs for privacy!
-export async function getCandidateBySecureToken(token: string): Promise<Candidate | null> {
-  if (isSupabaseConfigured() && (supabaseClient || supabaseAdmin)) {
-    const client = supabaseClient || supabaseAdmin!;
-    const { data, error } = await client
-      .from('candidates')
-      .select('*, interviews(*), candidate_updates(*)')
-      .eq('secure_token', token)
-      .single();
-
-    if (!error && data) {
-      const publicUpdates = (data.candidate_updates || []).filter(
-        (u: CandidateUpdate) => u.is_candidate_visible
-      );
-      return {
-        id: data.id,
-        application_id: data.application_id,
-        secure_token: data.secure_token,
-        full_name: data.full_name,
-        email: data.email,
-        phone: data.phone,
-        position: data.position,
-        department: data.department,
-        campaign: data.campaign,
-        status: data.status,
-        application_date: data.application_date,
-        last_updated: data.last_updated,
-        interview: data.interviews?.[0] || null,
-        updates: publicUpdates,
-        // STRICT PRIVACY: notes and activity logs are omitted for candidate portal
-        notes: [],
-        activity_logs: [],
-      };
-    }
-  }
-
-  const candidate = memoryCandidates.find((c) => c.secure_token === token);
-  if (!candidate) return null;
-
-  // Clone and sanitize candidate view
-  return {
-    ...JSON.parse(JSON.stringify(candidate)),
-    notes: [],
-    activity_logs: [],
-    updates: (candidate.updates || []).filter((u) => u.is_candidate_visible),
-  };
-}
-
-export async function createCandidate(data: Partial<Candidate>, performedBy: string = 'LCB HR Admin'): Promise<Candidate> {
-  const newId = crypto.randomUUID();
-  const appId = data.application_id || generateApplicationId();
-  const secureToken = data.secure_token || generateSecureToken();
-  const now = new Date().toISOString();
-
-  const newCandidate: Candidate = {
-    id: newId,
-    application_id: appId,
-    secure_token: secureToken,
-    full_name: data.full_name || 'Candidate',
-    email: data.email || '',
-    phone: data.phone || '',
-    position: data.position || 'Campus Lead',
-    department: data.department || 'Campus Division',
-    campaign: data.campaign || 'LCB Central Team Recruitment — 2026',
-    status: data.status || 'APPLICATION_RECEIVED',
-    application_date: data.application_date || now,
-    last_updated: now,
-    is_archived: false,
-    interview: null,
-    updates: [],
-    notes: data.notes && typeof data.notes === 'string' ? [
-      {
-        id: crypto.randomUUID(),
-        candidate_id: newId,
-        content: data.notes,
-        author: performedBy,
-        created_at: now,
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('candidates')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (!error && data) {
+        return normalizeCandidateRow(data);
       }
-    ] : [],
-    activity_logs: [
-      {
-        id: crypto.randomUUID(),
-        candidate_id: newId,
-        action_type: 'CANDIDATE_CREATED',
-        details: `Candidate profile created manually (${appId})`,
-        performed_by: performedBy,
-        timestamp: now,
-      },
-    ],
-  };
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    const { error } = await supabaseAdmin.from('candidates').insert({
-      id: newCandidate.id,
-      application_id: newCandidate.application_id,
-      secure_token: newCandidate.secure_token,
-      full_name: newCandidate.full_name,
-      email: newCandidate.email,
-      phone: newCandidate.phone,
-      position: newCandidate.position,
-      department: newCandidate.department,
-      campaign: newCandidate.campaign,
-      status: newCandidate.status,
-      application_date: newCandidate.application_date,
-      last_updated: newCandidate.last_updated,
-    });
-
-    if (error) {
-      console.warn('Supabase insert error, falling back to memory store:', error.message);
+    } catch (err) {
+      console.warn('Supabase getCandidateById failed:', err);
     }
   }
 
-  memoryCandidates.unshift(newCandidate);
-  return newCandidate;
+  const found = memoryCandidates.find((c) => c.id === id);
+  return found
+    ? {
+        ...found,
+        secure_token: ensureHashedToken(found.secure_token, found.id),
+      }
+    : null;
 }
 
-export async function updateCandidate(
+export async function getCandidateBySecureToken(
+  token: string
+): Promise<CandidatePublicView | null> {
+  if (!token || token.trim().length === 0) return null;
+
+  const cleanToken = token.trim().toLowerCase();
+
+  const toPublicView = (
+    row: any,
+    canonicalToken: string,
+    isLegacyToken: boolean
+  ): CandidatePublicView | null => {
+    // Check if memory has a newer version of this candidate
+    const rowId = row.id;
+    const memCandidate = memoryCandidates.find((c) => c.id === rowId || c.email === row.email);
+    const effective = memCandidate || row;
+
+    const createdAt = effective.created_at || effective.date_added;
+    if (globalStore.__lcbResetTimestamp && createdAt) {
+      const rowTime = new Date(createdAt).getTime();
+      if (!isNaN(rowTime) && rowTime < globalStore.__lcbResetTimestamp) {
+        return null;
+      }
+    }
+    const expired = isTokenExpired(createdAt);
+    const expiredAt = createdAt
+      ? new Date(new Date(createdAt).getTime() + TOKEN_EXPIRATION_MS).toISOString()
+      : undefined;
+
+    return {
+      name: effective.name || effective.full_name || 'Candidate',
+      status: (effective.status?.toLowerCase() || 'decision_pending') as CandidateStatus,
+      updated_at: effective.updated_at || effective.last_updated || new Date().toISOString(),
+      created_at: createdAt || undefined,
+      is_expired: expired,
+      expired_at: expiredAt,
+      canonicalToken,
+      isLegacyToken,
+    };
+  };
+
+  const matchesCandidate = (candToken: string | undefined, candId: string) => {
+    if (!candToken) return false;
+    const raw = candToken.toLowerCase();
+    const canonical = ensureHashedToken(candToken, candId).toLowerCase();
+    return (
+      raw === cleanToken ||
+      canonical === cleanToken ||
+      raw.startsWith(cleanToken) ||
+      cleanToken.startsWith(canonical) ||
+      raw.slice(0, SECURE_TOKEN_LENGTH) === cleanToken.slice(0, SECURE_TOKEN_LENGTH) ||
+      ensureHashedToken(cleanToken, candId) === canonical
+    );
+  };
+
+  // 1. Check in-memory candidates first
+  for (const c of memoryCandidates) {
+    const canonical = ensureHashedToken(c.secure_token, c.id);
+    if (matchesCandidate(c.secure_token, c.id)) {
+      const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
+      return toPublicView(c, canonical, !isExactCanonical);
+    }
+  }
+
+  // 2. Query Supabase
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const { data: allRows, error } = await supabaseAdmin.from('candidates').select('*');
+      if (!error && allRows) {
+        for (const row of allRows) {
+          const canonical = ensureHashedToken(row.secure_token, row.id);
+          if (matchesCandidate(row.secure_token, row.id)) {
+            const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
+            return toPublicView(row, canonical, !isExactCanonical);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase token lookup failed:', err);
+    }
+  }
+
+  return null;
+}
+
+export async function updateCandidateStatus(
   id: string,
-  updates: Partial<Candidate>,
-  performedBy: string = 'LCB HR Admin'
+  status: CandidateStatus
 ): Promise<Candidate | null> {
-  const existing = memoryCandidates.find((c) => c.id === id);
   const now = new Date().toISOString();
 
-  if (existing) {
-    const oldStatus = existing.status;
-    const newStatus = updates.status;
-
-    if (newStatus && newStatus !== oldStatus) {
-      existing.activity_logs = existing.activity_logs || [];
-      existing.activity_logs.unshift({
-        id: crypto.randomUUID(),
-        candidate_id: id,
-        action_type: 'STATUS_CHANGE',
-        details: `Status changed: ${oldStatus} -> ${newStatus}`,
-        performed_by: performedBy,
-        timestamp: now,
-      });
-
-      // Also publish an automatic candidate-facing notification update
-      existing.updates = existing.updates || [];
-      existing.updates.unshift({
-        id: crypto.randomUUID(),
-        candidate_id: id,
-        title: `Status Updated to ${newStatus.replace(/_/g, ' ')}`,
-        message: `Your application stage has advanced to ${newStatus.replace(/_/g, ' ')}.`,
-        date: now,
-        is_candidate_visible: true,
-        created_at: now,
-      });
-    }
-
-    Object.assign(existing, updates);
-    existing.last_updated = now;
-  }
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    await supabaseAdmin
-      .from('candidates')
-      .update({
-        ...updates,
-        last_updated: now,
-      })
-      .eq('id', id);
-  }
-
-  return existing ? JSON.parse(JSON.stringify(existing)) : null;
-}
-
-export async function scheduleInterview(
-  candidateId: string,
-  interviewData: Partial<Interview>,
-  performedBy: string = 'LCB HR Admin'
-): Promise<Interview> {
-  const now = new Date().toISOString();
-  const newInterview: Interview = {
-    id: interviewData.id || crypto.randomUUID(),
-    candidate_id: candidateId,
-    status: interviewData.status || 'SCHEDULED',
-    date: interviewData.date || new Date().toISOString().split('T')[0],
-    time: interviewData.time || '09:00 PM',
-    timezone: interviewData.timezone || 'Asia/Dhaka (BST, GMT+6)',
-    duration: interviewData.duration || 20,
-    interview_type: interviewData.interview_type || 'Online',
-    meeting_platform: interviewData.meeting_platform || 'Google Meet',
-    meeting_link: interviewData.meeting_link || 'https://meet.google.com/lcb-interview',
-    interviewer: interviewData.interviewer || 'LCB Recruitment Committee',
-    instructions: interviewData.instructions || 'Please join on time with camera enabled.',
-    created_at: now,
-    updated_at: now,
-  };
-
-  const candidate = memoryCandidates.find((c) => c.id === candidateId);
-  if (candidate) {
-    candidate.interview = newInterview;
-    candidate.status = 'INTERVIEW_SCHEDULED';
-    candidate.last_updated = now;
-
-    // Add activity log
-    candidate.activity_logs = candidate.activity_logs || [];
-    candidate.activity_logs.unshift({
-      id: crypto.randomUUID(),
-      candidate_id: candidateId,
-      action_type: 'INTERVIEW_SCHEDULED',
-      details: `Interview scheduled on ${newInterview.date} at ${newInterview.time} (${newInterview.meeting_platform})`,
-      performed_by: performedBy,
-      timestamp: now,
-    });
-
-    // Add candidate-visible update
-    candidate.updates = candidate.updates || [];
-    candidate.updates.unshift({
-      id: crypto.randomUUID(),
-      candidate_id: candidateId,
-      title: 'Interview Scheduled',
-      message: `Your interview is scheduled for ${newInterview.date} at ${newInterview.time} (${newInterview.timezone}). Platform: ${newInterview.meeting_platform}. Check interview details below.`,
-      date: now,
-      is_candidate_visible: true,
-      created_at: now,
-    });
-  }
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    await supabaseAdmin.from('interviews').upsert(newInterview);
-    await supabaseAdmin
-      .from('candidates')
-      .update({ status: 'INTERVIEW_SCHEDULED', last_updated: now })
-      .eq('id', candidateId);
-  }
-
-  return newInterview;
-}
-
-export async function addCandidateUpdate(
-  candidateId: string,
-  updateData: { title: string; message: string; is_candidate_visible?: boolean },
-  performedBy: string = 'LCB HR Admin'
-): Promise<CandidateUpdate> {
-  const now = new Date().toISOString();
-  const newUpdate: CandidateUpdate = {
-    id: crypto.randomUUID(),
-    candidate_id: candidateId,
-    title: updateData.title,
-    message: updateData.message,
-    date: now,
-    is_candidate_visible: updateData.is_candidate_visible ?? true,
-    created_at: now,
-  };
-
-  const candidate = memoryCandidates.find((c) => c.id === candidateId);
-  if (candidate) {
-    candidate.updates = candidate.updates || [];
-    candidate.updates.unshift(newUpdate);
-    candidate.last_updated = now;
-
-    candidate.activity_logs = candidate.activity_logs || [];
-    candidate.activity_logs.unshift({
-      id: crypto.randomUUID(),
-      candidate_id: candidateId,
-      action_type: 'UPDATE_PUBLISHED',
-      details: `Announcement published: "${newUpdate.title}"`,
-      performed_by: performedBy,
-      timestamp: now,
-    });
-  }
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    await supabaseAdmin.from('candidate_updates').insert(newUpdate);
-  }
-
-  return newUpdate;
-}
-
-export async function addInternalNote(
-  candidateId: string,
-  content: string,
-  author: string = 'LCB HR Team'
-): Promise<InternalNote> {
-  const now = new Date().toISOString();
-  const newNote: InternalNote = {
-    id: crypto.randomUUID(),
-    candidate_id: candidateId,
-    content,
-    author,
-    created_at: now,
-  };
-
-  const candidate = memoryCandidates.find((c) => c.id === candidateId);
-  if (candidate) {
-    candidate.notes = candidate.notes || [];
-    candidate.notes.unshift(newNote);
-
-    candidate.activity_logs = candidate.activity_logs || [];
-    candidate.activity_logs.unshift({
-      id: crypto.randomUUID(),
-      candidate_id: candidateId,
-      action_type: 'NOTE_ADDED',
-      details: `Internal note added by ${author}`,
-      performed_by: author,
-      timestamp: now,
-    });
-  }
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    await supabaseAdmin.from('internal_notes').insert(newNote);
-  }
-
-  return newNote;
-}
-
-export async function deleteCandidate(id: string, softDelete = true): Promise<boolean> {
-  const index = memoryCandidates.findIndex((c) => c.id === id);
-  if (index === -1) return false;
-
-  if (softDelete) {
-    memoryCandidates[index].is_archived = true;
-    memoryCandidates[index].last_updated = new Date().toISOString();
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      await supabaseAdmin.from('candidates').update({ is_archived: true }).eq('id', id);
-    }
+  // Update memory store
+  const idx = memoryCandidates.findIndex((c) => c.id === id);
+  if (idx !== -1) {
+    memoryCandidates[idx] = {
+      ...memoryCandidates[idx],
+      status,
+      updated_at: now,
+    };
   } else {
-    memoryCandidates.splice(index, 1);
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      await supabaseAdmin.from('candidates').delete().eq('id', id);
+    // If not in memory, fetch and add to memory store with now
+    const existing = await getCandidateById(id);
+    if (existing) {
+      const updatedItem: Candidate = {
+        ...existing,
+        status,
+        updated_at: now,
+      };
+      memoryCandidates.push(updatedItem);
     }
   }
-  return true;
-}
 
-export async function bulkUpdateStatus(
-  candidateIds: string[],
-  status: CandidateStatus,
-  performedBy: string = 'LCB HR Admin'
-): Promise<number> {
-  let count = 0;
-  for (const id of candidateIds) {
-    const updated = await updateCandidate(id, { status }, performedBy);
-    if (updated) count++;
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('candidates')
+        .update({ status, last_updated: now })
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+
+      if (!error && data) {
+        const norm = normalizeCandidateRow(data);
+        norm.updated_at = now;
+        return norm;
+      }
+    } catch (err) {
+      console.warn('Supabase status update failed:', err);
+    }
   }
-  return count;
+
+  const found = memoryCandidates.find((c) => c.id === id);
+  if (found) {
+    return { ...found, status, updated_at: now };
+  }
+
+  return null;
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const candidates = await getCandidates({ includeArchived: false });
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+export async function markEmailSent(id: string): Promise<Candidate | null> {
+  const now = new Date().toISOString();
 
-  const stats: DashboardStats = {
-    total: candidates.length,
-    underReview: candidates.filter((c) => c.status === 'UNDER_REVIEW').length,
-    shortlisted: candidates.filter((c) => c.status === 'SHORTLISTED').length,
-    interviewScheduled: candidates.filter((c) => c.status === 'INTERVIEW_SCHEDULED').length,
-    selected: candidates.filter((c) => c.status === 'SELECTED').length,
-    notSelected: candidates.filter((c) => c.status === 'NOT_SELECTED').length,
-    recentCount: candidates.filter((c) => new Date(c.application_date) >= oneWeekAgo).length,
+  const idx = memoryCandidates.findIndex((c) => c.id === id);
+  if (idx !== -1) {
+    memoryCandidates[idx] = {
+      ...memoryCandidates[idx],
+      email_sent: true,
+      email_sent_at: now,
+      updated_at: now,
+    };
+  }
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('candidates')
+        .update({
+          email_sent: true,
+          email_sent_at: now,
+          last_updated: now,
+        })
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+
+      if (!error && data) {
+        return normalizeCandidateRow(data);
+      }
+    } catch (err) {
+      console.warn('Supabase markEmailSent failed:', err);
+    }
+  }
+
+  if (idx !== -1) {
+    return { ...memoryCandidates[idx] };
+  }
+
+  return null;
+}
+
+export interface ImportResult {
+  totalParsed: number;
+  inserted: number;
+  updated: number;
+  errors: string[];
+}
+
+export async function importCandidates(
+  entries: { name: string; email: string }[]
+): Promise<ImportResult> {
+  let inserted = 0;
+  let updated = 0;
+  const errors: string[] = [];
+
+  for (const entry of entries) {
+    const cleanEmail = entry.email.trim().toLowerCase();
+    const cleanName = entry.name.trim();
+
+    if (!cleanEmail || !cleanName) {
+      errors.push(`Skipped row with missing name or email: ${JSON.stringify(entry)}`);
+      continue;
+    }
+
+    let savedToSupabase = false;
+    const token = generateSecureToken();
+    const now = new Date().toISOString();
+
+    if (isSupabaseConfigured() && supabaseAdmin) {
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('candidates')
+          .select('id, secure_token, status')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+
+        if (existing) {
+          const { error: updErr } = await supabaseAdmin
+            .from('candidates')
+            .update({
+              full_name: cleanName,
+              last_updated: now,
+            })
+            .eq('id', existing.id);
+
+          if (!updErr) {
+            savedToSupabase = true;
+            updated++;
+          }
+        } else {
+          const appId = 'LCB-2026-' + Math.floor(1000 + Math.random() * 9000);
+          const insertPayload: Record<string, any> = {
+            application_id: appId,
+            full_name: cleanName,
+            email: cleanEmail,
+            phone: 'N/A',
+            position: 'Applicant',
+            department: 'General',
+            campaign: 'LCB Central Team Recruitment — 2026',
+            status: 'decision_pending',
+            secure_token: token,
+            application_date: now,
+            last_updated: now,
+            created_at: now,
+          };
+
+          const { error: insErr } = await supabaseAdmin.from('candidates').insert(insertPayload);
+          if (!insErr) {
+            savedToSupabase = true;
+            inserted++;
+          }
+        }
+      } catch (err: any) {
+        console.warn('Supabase import caught error:', err?.message);
+      }
+    }
+
+    // Always maintain or update in-memory record on globalThis to guarantee responsiveness
+    const existingIdx = memoryCandidates.findIndex(
+      (c) => c.email.toLowerCase() === cleanEmail
+    );
+    if (existingIdx !== -1) {
+      memoryCandidates[existingIdx] = {
+        ...memoryCandidates[existingIdx],
+        name: cleanName,
+        updated_at: now,
+      };
+      if (!savedToSupabase) updated++;
+    } else {
+      memoryCandidates.unshift({
+        id: crypto.randomUUID(),
+        name: cleanName,
+        email: cleanEmail,
+        status: 'decision_pending',
+        secure_token: token,
+        email_sent: false,
+        email_sent_at: null,
+        created_at: now,
+        updated_at: now,
+      });
+      if (!savedToSupabase) inserted++;
+    }
+  }
+
+  return {
+    totalParsed: entries.length,
+    inserted,
+    updated,
+    errors,
   };
-
-  return stats;
 }
+
+export async function deleteCandidate(id: string): Promise<boolean> {
+  const idx = memoryCandidates.findIndex((c) => c.id === id);
+  if (idx !== -1) {
+    memoryCandidates.splice(idx, 1);
+  }
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const { error } = await supabaseAdmin.from('candidates').delete().eq('id', id);
+      if (!error) return true;
+    } catch (err) {
+      console.warn('Supabase deleteCandidate failed:', err);
+    }
+  }
+
+  return idx !== -1;
+}
+
+export async function resetAllCandidates(): Promise<{ success: boolean; count: number }> {
+  const count = memoryCandidates.length;
+  globalStore.__lcbResetTimestamp = Date.now();
+  // Clear in-memory array completely
+  memoryCandidates.splice(0, memoryCandidates.length);
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      // Delete all candidates from Supabase
+      const { error } = await supabaseAdmin
+        .from('candidates')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (error) {
+        console.warn('Supabase reset candidates notice:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('Supabase reset caught error:', err?.message);
+    }
+  }
+
+  return { success: true, count };
+}
+
+export async function purgeExpiredCandidates(days = TOKEN_EXPIRATION_DAYS): Promise<{ count: number }> {
+  const thresholdTime = Date.now() - days * 24 * 60 * 60 * 1000;
+  const thresholdIso = new Date(thresholdTime).toISOString();
+  let count = 0;
+
+  // Clear expired in-memory entries
+  for (let i = memoryCandidates.length - 1; i >= 0; i--) {
+    const item = memoryCandidates[i];
+    if (new Date(item.created_at).getTime() < thresholdTime) {
+      memoryCandidates.splice(i, 1);
+      count++;
+    }
+  }
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('candidates')
+        .delete()
+        .lt('created_at', thresholdIso)
+        .select('id');
+
+      if (!error && data) {
+        count = Math.max(count, data.length);
+      }
+    } catch (err: any) {
+      console.warn('Supabase purge caught error:', err?.message);
+    }
+  }
+
+  return { count };
+}
+

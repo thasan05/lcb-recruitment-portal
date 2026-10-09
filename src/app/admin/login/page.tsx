@@ -144,7 +144,7 @@ export default function AdminLoginPage() {
 
         <div className="mt-6 text-center">
           <Link href="/" className="text-xs text-slate-400 hover:text-white transition-colors">
-            ← Return to Candidate Portal
+            ← Return to Homepage
           </Link>
         </div>
       </div>

@@ -19,14 +19,16 @@ export async function GET(
       );
     }
 
-    // Double check privacy guarantees
-    const safeCandidate = {
-      ...candidate,
-      notes: undefined,
-      activity_logs: undefined,
-    };
-
-    return NextResponse.json({ candidate: safeCandidate });
+    // Only return public-safe recruitment status data
+    return NextResponse.json({
+      candidate: {
+        name: candidate.name,
+        status: candidate.status,
+        updated_at: candidate.updated_at,
+        is_expired: candidate.is_expired,
+        expired_at: candidate.expired_at,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json(
       { error: 'Failed to retrieve application', details: error.message },

@@ -1,173 +1,118 @@
 import Link from 'next/link';
-import Image from 'next/image';
-import { LCBNavbar } from '@/components/LCBNavbar';
-import { Footer } from '@/components/Footer';
-import { QuickTracker } from '@/components/QuickTracker';
-import {
-  ShieldCheck,
-  ArrowRight,
-  Sparkles,
-  Users,
-  Compass,
-  Briefcase,
-  CheckCircle2,
-  Calendar,
-  Lock,
-} from 'lucide-react';
+import { LCBLogo } from '@/components/LCBLogo';
+import { ShieldCheck, Sparkles, Activity, ArrowRight, CheckCircle2, Lock } from 'lucide-react';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#040614] text-white flex flex-col selection:bg-blue-600 selection:text-white overflow-hidden">
-      <LCBNavbar />
+    <div className="min-h-screen bg-[#040614] text-white flex flex-col relative overflow-hidden selection:bg-blue-600 selection:text-white">
+      {/* Background Graphic: Cyber Grid */}
+      <div className="absolute inset-0 bg-grid-cyber pointer-events-none z-0 opacity-75" />
 
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative pt-12 pb-20 sm:pt-20 sm:pb-28">
-          {/* Ambient Lighting Gradients */}
-          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[500px] w-full max-w-6xl rounded-full bg-gradient-to-b from-blue-600/20 via-cyan-500/10 to-transparent blur-3xl -z-10" />
+      {/* Floating Animated Ambient Glow Orbs */}
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse-glow z-0" />
+      <div className="absolute top-1/4 -left-48 w-96 h-96 bg-cyan-500/15 rounded-full blur-[100px] pointer-events-none animate-float-slow z-0" />
+      <div className="absolute top-1/3 -right-48 w-96 h-96 bg-indigo-600/15 rounded-full blur-[110px] pointer-events-none animate-float-reverse z-0" />
 
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center">
-            {/* Shimmer Badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-white/80 shadow-lg backdrop-blur-md">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inset-0 animate-ping rounded-full bg-cyan-400" />
-                <span className="relative h-2 w-2 rounded-full bg-cyan-400" />
-              </span>
-              <span>LinkedIn Community Bangladesh</span>
-            </div>
-
-            <h1 className="mt-8 text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-white leading-[1.1]">
-              Where ambition finds <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-white">
-                its people.
-              </span>
-            </h1>
-
-            <p className="mt-6 max-w-2xl mx-auto text-base sm:text-xl text-slate-300 leading-relaxed">
-              Welcome to the official recruitment management portal. Track your application status, interview schedules, and evaluation milestones in real time.
-            </p>
-
-            {/* Quick Candidate Application Tracker */}
-            <div className="mt-10 max-w-xl mx-auto">
-              <QuickTracker />
-            </div>
-
-            {/* Explore Demo Profiles */}
-            <div className="mt-12 pt-8 border-t border-white/10 max-w-2xl mx-auto">
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">
-                Try Live Demo Candidate Portals
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  href="/candidate/tok_lcb_tanvir_h_2026"
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 bg-slate-900/60 hover:bg-white/10 text-xs font-medium text-slate-200 transition-colors"
-                >
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  <span>Tanvir Hasan (Interview Stage)</span>
-                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                </Link>
-
-                <Link
-                  href="/candidate/tok_lcb_sadia_a_2026"
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 bg-slate-900/60 hover:bg-white/10 text-xs font-medium text-slate-200 transition-colors"
-                >
-                  <span className="h-2 w-2 rounded-full bg-cyan-400" />
-                  <span>Sadia Akter (Shortlisted)</span>
-                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                </Link>
-
-                <Link
-                  href="/candidate/tok_lcb_rahim_a_2026"
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/10 bg-slate-900/60 hover:bg-white/10 text-xs font-medium text-slate-200 transition-colors"
-                >
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span>Rahim Ahmed (Selected)</span>
-                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                </Link>
-              </div>
-            </div>
+      {/* Header */}
+      <header className="border-b border-white/[0.08] bg-[#040614]/80 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
+          {/* Top-Left Brand: Fixed, Clean, Non-colliding */}
+          <div className="flex items-center">
+            <LCBLogo variant="full" />
           </div>
-        </section>
 
-        {/* Feature Grid: How LCB Recruitment Works */}
-        <section className="py-16 border-t border-white/[0.08] bg-[#020512]">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-12">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Engineered for Transparency & Excellence
-              </h2>
-              <p className="mt-3 text-sm text-slate-400">
-                A modern hiring experience for Bangladesh&apos;s most ambitious youth and leadership talent.
+          {/* Top-Right: Protected HR Portal Link */}
+          <Link
+            href="/admin"
+            className="group inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/40 shadow-sm transition-all duration-300"
+          >
+            <span>HR Portal</span>
+            <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 relative z-10 py-12 sm:py-20">
+        <div className="max-w-3xl w-full text-center mx-auto animate-fade-in-up">
+          {/* Shimmering Badge with Live Pulse */}
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-cyan-500/30 px-4 py-1.5 text-xs font-medium text-cyan-300 shimmer-badge shadow-lg shadow-cyan-950/40 mb-8 select-none">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+            </span>
+            <span>Official Recruitment Portal</span>
+            <span className="text-slate-500">•</span>
+            <span className="text-slate-300">LCB Season 2026</span>
+          </div>
+
+          {/* Hero Heading */}
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-[1.12]">
+            Recruitment Management{' '}
+            <span className="text-gradient-cyan block sm:inline">Portal</span>
+          </h1>
+
+          {/* Exact Required Subtitle */}
+          <p className="mt-6 text-base sm:text-lg text-slate-300/90 leading-relaxed max-w-2xl mx-auto font-normal">
+            Welcome to the official recruitment management portal. Track your application status and evaluation milestones in real time.
+          </p>
+
+          {/* Interactive Visual Graphic: 3-Milestone Flow */}
+          <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+            {/* Card 1 */}
+            <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/10 group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all pointer-events-none" />
+              <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-3.5 group-hover:scale-110 transition-transform">
+                <Activity className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-semibold text-white tracking-tight">
+                Live Milestones
+              </h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Stay updated as your application progresses from interview to final review.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Feature 1 */}
-              <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-6 backdrop-blur-xl">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-5">
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Private Candidate Portals</h3>
-                <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Every applicant receives a dedicated, secure tracking portal accessible with their personal token. No accounts or passwords required.
-                </p>
+            {/* Card 2 */}
+            <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/10 group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all pointer-events-none" />
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-3.5 group-hover:scale-110 transition-transform">
+                <Lock className="h-5 w-5" />
               </div>
+              <h3 className="text-sm font-semibold text-white tracking-tight">
+                Private Token Access
+              </h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Direct, password-free status tracking via your encrypted personal link.
+              </p>
+            </div>
 
-              {/* Feature 2 */}
-              <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-6 backdrop-blur-xl">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mb-5">
-                  <Calendar className="h-6 w-6" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Direct Interview Coordination</h3>
-                <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Review time slots in Bangladesh Standard Time (BST), launch Google Meet calls with one click, and export invites directly to Google Calendar.
-                </p>
+            {/* Card 3 */}
+            <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/10 group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-all pointer-events-none" />
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-3.5 group-hover:scale-110 transition-transform">
+                <ShieldCheck className="h-5 w-5" />
               </div>
-
-              {/* Feature 3 */}
-              <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-6 backdrop-blur-xl">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-5">
-                  <Sparkles className="h-6 w-6" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Real-Time Progression</h3>
-                <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Instant visual stepper updates as your application advances through screening, evaluation, panel interview, and selection.
-                </p>
-              </div>
+              <h3 className="text-sm font-semibold text-white tracking-tight">
+                Official Verification
+              </h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                Validated recruitment outcomes issued by LinkedIn Community Bangladesh HR.
+              </p>
             </div>
           </div>
-        </section>
-
-        {/* HR Gateway Banner */}
-        <section className="py-16">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-            <div className="relative overflow-hidden rounded-3xl border border-blue-500/30 bg-gradient-to-r from-blue-950/70 via-slate-950 to-indigo-950/70 p-8 sm:p-12 text-center sm:text-left backdrop-blur-xl shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-8">
-              <div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-400/30 mb-3">
-                  <Lock className="h-3.5 w-3.5" />
-                  Internal HR Administration
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                  LCB Talent & HR Team Access
-                </h2>
-                <p className="mt-2 text-sm text-slate-300 max-w-xl leading-relaxed">
-                  Access the internal recruitment pipeline, evaluate applicants, coordinate panels, and generate candidate communication links.
-                </p>
-              </div>
-
-              <Link
-                href="/admin"
-                className="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-500 px-6 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/30 transition-all active:scale-[0.98]"
-              >
-                <span>Open HR Console</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
+        </div>
       </main>
 
-      <Footer />
+      {/* Minimal Footer */}
+      <footer className="border-t border-white/[0.06] py-6 px-4 text-center text-xs text-slate-500 relative z-10 bg-[#040614]/60 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span>&copy; {new Date().getFullYear()} LinkedIn Community Bangladesh. All rights reserved.</span>
+          <span className="text-[11px] text-slate-600">
+            Empowering the Next Generation of Professionals
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }
