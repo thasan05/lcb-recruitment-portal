@@ -1,17 +1,42 @@
 import crypto from 'crypto';
 import { Candidate, CandidateStatus, CandidatePublicView, normalizeCandidateStatus } from '@/types';
-import { isSupabaseConfigured, supabaseAdmin, supabaseClient } from '../supabase';
+import { isSupabaseConfigured, supabaseAdmin } from '../supabase';
 import seedCandidatesRaw from './candidates-seed.json';
 
 // Compact cryptographic token length: 24 hex characters (96 bits of entropy, unguessable, short & mobile-friendly)
 export const SECURE_TOKEN_LENGTH = 24;
 
-// Generate unguessable cryptographic token for candidate access (compact 24-char random hex hash, zero names)
+// Generate unguessable cryptographic token for candidate access (compact 24-char random hex, 96 bits entropy)
 export function generateSecureToken(): string {
   return crypto.randomBytes(12).toString('hex');
 }
 
-// Ensures a token is strictly a shortened 24-character encrypted random hex hash with ZERO names
+/**
+ * Validates token string format and minimum length to prevent enumeration / wildcard attacks.
+ */
+export function isValidTokenFormat(token: string | undefined): boolean {
+  if (!token) return false;
+  const clean = token.trim().toLowerCase();
+  // Modern canonical token: exactly 24 hexadecimal characters
+  if (/^[a-f0-9]{24}$/.test(clean)) return true;
+  // Legacy token format: tok_lcb_<alphanumeric_and_underscore>
+  if (/^tok_lcb_[a-z0-9_]{6,40}$/.test(clean)) return true;
+  return false;
+}
+
+/**
+ * Formula injection sanitizer: neutralizes spreadsheet formula prefixes (=, +, -, @, \t, \r)
+ */
+export function sanitizeSpreadsheetCell(value: string): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (/^[=+\-@\t\r]/.test(trimmed)) {
+    return `'${trimmed}`;
+  }
+  return trimmed;
+}
+
+// Ensures a token is strictly a shortened 24-character random hex hash with ZERO names
 export function ensureHashedToken(token: string | undefined, id: string): string {
   if (!token) {
     return crypto.createHash('sha256').update('lcb_salt_token_' + id).digest('hex').slice(0, SECURE_TOKEN_LENGTH);
@@ -26,7 +51,7 @@ export function ensureHashedToken(token: string | undefined, id: string): string
   ) {
     return crypto.createHash('sha256').update('lcb_salt_token_' + id).digest('hex').slice(0, SECURE_TOKEN_LENGTH);
   }
-  // If already a clean hex string, return first 24 characters
+  // If already a clean hex string of appropriate length, return first 24 characters
   return clean.slice(0, SECURE_TOKEN_LENGTH);
 }
 
@@ -47,22 +72,30 @@ const globalStore = globalThis as unknown as {
 };
 
 // Helper to normalize Supabase or seed row to Candidate interface
-function normalizeCandidateRow(row: any): Candidate {
+function normalizeCandidateRow(row: Record<string, unknown>): Candidate {
+  const nameVal = (row.name ?? row.full_name ?? 'Candidate') as string;
+  const emailVal = (row.email ?? '') as string;
+  const statusVal = (row.status ?? 'decision_pending') as string;
+  const tokenVal = (row.secure_token ?? '') as string;
+  const idVal = (row.id ?? '') as string;
+  const createdAtVal = (row.created_at ?? row.application_date ?? new Date().toISOString()) as string;
+  const updatedAtVal = (row.updated_at ?? row.last_updated ?? new Date().toISOString()) as string;
+
   return {
-    id: row.id,
-    name: row.name || row.full_name || 'Candidate',
-    email: row.email,
-    status: normalizeCandidateStatus(row.status),
-    secure_token: ensureHashedToken(row.secure_token, row.id),
+    id: idVal,
+    name: sanitizeSpreadsheetCell(nameVal).slice(0, 100),
+    email: emailVal.trim().toLowerCase().slice(0, 254),
+    status: normalizeCandidateStatus(statusVal),
+    secure_token: ensureHashedToken(tokenVal, idVal),
     email_sent: Boolean(row.email_sent),
-    email_sent_at: row.email_sent_at || null,
-    created_at: row.created_at || row.application_date || new Date().toISOString(),
-    updated_at: row.updated_at || row.last_updated || new Date().toISOString(),
+    email_sent_at: (row.email_sent_at as string | null) || null,
+    created_at: createdAtVal,
+    updated_at: updatedAtVal,
   };
 }
 
 if (!globalStore.__lcbCandidates) {
-  const seeded = (seedCandidatesRaw as any[]).map((row) => normalizeCandidateRow(row));
+  const seeded = (seedCandidatesRaw as unknown as Record<string, unknown>[]).map((row) => normalizeCandidateRow(row));
   globalStore.__lcbCandidates = seeded;
 }
 
@@ -77,6 +110,11 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
   const candidatesMap = new Map<string, Candidate>();
   let fetchedFromSupabase = false;
 
+  // Sanitize search query to prevent PostgREST injection via commas or parentheses
+  const sanitizedSearch = searchQuery
+    ? searchQuery.trim().toLowerCase().replace(/[^a-z0-9@._\s-]/g, '').slice(0, 50)
+    : undefined;
+
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
       let query = supabaseAdmin
@@ -84,8 +122,8 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (searchQuery && searchQuery.trim()) {
-        const q = `%${searchQuery.trim().toLowerCase()}%`;
+      if (sanitizedSearch) {
+        const q = `%${sanitizedSearch}%`;
         query = query.or(`name.ilike.${q},email.ilike.${q},full_name.ilike.${q}`);
       }
 
@@ -107,10 +145,9 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
   // If Supabase is configured and connected, return Supabase candidates directly
   if (fetchedFromSupabase) {
     let list = Array.from(candidatesMap.values());
-    if (searchQuery && searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
+    if (sanitizedSearch) {
       list = list.filter(
-        (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+        (c) => c.name.toLowerCase().includes(sanitizedSearch) || c.email.toLowerCase().includes(sanitizedSearch)
       );
     }
     return list.sort(
@@ -128,10 +165,9 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
   }
 
   let list = Array.from(candidatesMap.values());
-  if (searchQuery && searchQuery.trim()) {
-    const q = searchQuery.trim().toLowerCase();
+  if (sanitizedSearch) {
     list = list.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+      (c) => c.name.toLowerCase().includes(sanitizedSearch) || c.email.toLowerCase().includes(sanitizedSearch)
     );
   }
 
@@ -141,6 +177,8 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
 }
 
 export async function getCandidateById(id: string): Promise<Candidate | null> {
+  if (!id || typeof id !== 'string' || id.length > 64) return null;
+
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
       const { data, error } = await supabaseAdmin
@@ -165,28 +203,43 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
     : null;
 }
 
+/**
+ * Secure lookup of candidate by private bearer token.
+ * 
+ * SECURITY ENFORCEMENT:
+ * 1. Requires valid token format and length (rejects short, wildcard, or malicious inputs).
+ * 2. Uses STRICT EXACT MATCHING ONLY. No startsWith, no wildcards, no ilike substrings.
+ * 3. Does NOT fall back to unrestricted table scans.
+ * 4. Returns only the public-safe view (CandidatePublicView) to protect candidate privacy.
+ */
 export async function getCandidateBySecureToken(
   token: string
 ): Promise<CandidatePublicView | null> {
-  if (!token || token.trim().length === 0) return null;
+  if (!token || !isValidTokenFormat(token)) {
+    return null;
+  }
 
   const cleanToken = token.trim().toLowerCase();
 
   const toPublicView = (
-    row: any,
+    row: Candidate | Record<string, unknown>,
     canonicalToken: string,
     isLegacyToken: boolean
-  ): CandidatePublicView | null => {
-    const createdAt = row.created_at || row.application_date || row.date_added;
+  ): CandidatePublicView => {
+    const raw = row as Record<string, unknown>;
+    const createdAt = (raw.created_at ?? raw.application_date ?? raw.date_added) as string | undefined;
+    const nameVal = (raw.name ?? raw.full_name ?? 'Candidate') as string;
+    const statusVal = (raw.status ?? 'decision_pending') as string;
+    const updatedAtVal = (raw.updated_at ?? raw.last_updated ?? new Date().toISOString()) as string;
     const expired = isTokenExpired(createdAt);
     const expiredAt = createdAt
       ? new Date(new Date(createdAt).getTime() + TOKEN_EXPIRATION_MS).toISOString()
       : undefined;
 
     return {
-      name: row.name || row.full_name || 'Candidate',
-      status: normalizeCandidateStatus(row.status),
-      updated_at: row.updated_at || row.last_updated || new Date().toISOString(),
+      name: sanitizeSpreadsheetCell(nameVal).slice(0, 100),
+      status: normalizeCandidateStatus(statusVal),
+      updated_at: updatedAtVal,
       created_at: createdAt || undefined,
       is_expired: expired,
       expired_at: expiredAt,
@@ -195,74 +248,32 @@ export async function getCandidateBySecureToken(
     };
   };
 
-  const matchesCandidate = (candToken: string | undefined, candId: string) => {
-    if (!candToken) return false;
-    const raw = candToken.toLowerCase().trim();
-    const canonical = ensureHashedToken(candToken, candId).toLowerCase().trim();
-    return (
-      raw === cleanToken ||
-      canonical === cleanToken ||
-      raw.startsWith(cleanToken) ||
-      cleanToken.startsWith(raw) ||
-      canonical.startsWith(cleanToken) ||
-      cleanToken.startsWith(canonical) ||
-      raw.slice(0, SECURE_TOKEN_LENGTH) === cleanToken.slice(0, SECURE_TOKEN_LENGTH) ||
-      canonical.slice(0, SECURE_TOKEN_LENGTH) === cleanToken.slice(0, SECURE_TOKEN_LENGTH) ||
-      ensureHashedToken(cleanToken, candId) === canonical
-    );
-  };
-
-  // 1. Query Supabase FIRST if configured (primary authoritative database)
+  // 1. Query Supabase FIRST using EXACT token match
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
-      // Direct token match query
-      const { data: directRows } = await supabaseAdmin
+      const { data: matchedRow, error } = await supabaseAdmin
         .from('candidates')
         .select('*')
-        .ilike('secure_token', `%${cleanToken.slice(0, 16)}%`)
-        .order('last_updated', { ascending: false });
+        .eq('secure_token', cleanToken)
+        .maybeSingle();
 
-      if (directRows && directRows.length > 0) {
-        for (const row of directRows) {
-          const canonical = ensureHashedToken(row.secure_token, row.id);
-          if (matchesCandidate(row.secure_token, row.id)) {
-            const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
-            return toPublicView(row, canonical, !isExactCanonical);
-          }
-        }
-      }
-
-      // Full table scan fallback in Supabase
-      const { data: allRows, error } = await supabaseAdmin
-        .from('candidates')
-        .select('*')
-        .order('last_updated', { ascending: false });
-      if (!error && allRows) {
-        for (const row of allRows) {
-          const canonical = ensureHashedToken(row.secure_token, row.id);
-          if (matchesCandidate(row.secure_token, row.id)) {
-            // Synchronize memory store in-place so fallback is always fresh
-            const memIdx = memoryCandidates.findIndex((c) => c.id === row.id || (row.email && c.email.toLowerCase() === row.email.toLowerCase()));
-            if (memIdx !== -1) {
-              memoryCandidates[memIdx].status = normalizeCandidateStatus(row.status);
-              memoryCandidates[memIdx].name = row.full_name || row.name || memoryCandidates[memIdx].name;
-              memoryCandidates[memIdx].email = row.email || memoryCandidates[memIdx].email;
-              memoryCandidates[memIdx].updated_at = row.last_updated || row.updated_at || new Date().toISOString();
-            }
-            const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
-            return toPublicView(row, canonical, !isExactCanonical);
-          }
-        }
+      if (!error && matchedRow) {
+        const canonical = ensureHashedToken(matchedRow.secure_token, matchedRow.id);
+        const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
+        return toPublicView(matchedRow, canonical, !isExactCanonical);
       }
     } catch (err) {
-      console.warn('Supabase token lookup failed:', err);
+      console.warn('Supabase exact token lookup failed:', err);
     }
   }
 
-  // 2. Check in-memory store as fallback
+  // 2. Check in-memory store using STRICT EXACT MATCH ONLY
   for (const c of memoryCandidates) {
-    const canonical = ensureHashedToken(c.secure_token, c.id);
-    if (matchesCandidate(c.secure_token, c.id)) {
+    const raw = (c.secure_token || '').toLowerCase().trim();
+    const canonical = ensureHashedToken(c.secure_token, c.id).toLowerCase().trim();
+
+    // STRICT EXACT MATCH ONLY
+    if (raw === cleanToken || canonical === cleanToken) {
       const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
       return toPublicView(c, canonical, !isExactCanonical);
     }
@@ -279,9 +290,11 @@ export async function updateCandidateDetails(
     status?: CandidateStatus;
   }
 ): Promise<Candidate | null> {
+  if (!id || typeof id !== 'string') return null;
+
   const now = new Date().toISOString();
-  const cleanName = updates.name ? updates.name.trim() : undefined;
-  const cleanEmail = updates.email ? updates.email.trim().toLowerCase() : undefined;
+  const cleanName = updates.name ? sanitizeSpreadsheetCell(updates.name.trim()).slice(0, 100) : undefined;
+  const cleanEmail = updates.email ? updates.email.trim().toLowerCase().slice(0, 254) : undefined;
   const normStatus = updates.status ? normalizeCandidateStatus(updates.status) : undefined;
 
   // 1. Update memory store
@@ -302,7 +315,6 @@ export async function updateCandidateDetails(
     };
     updatedCandidate = memoryCandidates[idx];
   } else {
-    // If candidate came from Supabase or was not in memory, pull existing record and store in memory
     const existing = await getCandidateById(id);
     if (existing) {
       updatedCandidate = {
@@ -319,7 +331,7 @@ export async function updateCandidateDetails(
   // 2. Persist to Supabase if configured
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
-      const patchObj: Record<string, any> = { last_updated: now };
+      const patchObj: Record<string, unknown> = { last_updated: now };
       if (cleanName) patchObj.full_name = cleanName;
       if (cleanEmail) patchObj.email = cleanEmail;
       if (normStatus) patchObj.status = normStatus;
@@ -369,8 +381,8 @@ export async function createCandidate(data: {
   email: string;
   status?: CandidateStatus;
 }): Promise<Candidate> {
-  const cleanEmail = data.email.trim().toLowerCase();
-  const cleanName = data.name.trim();
+  const cleanEmail = data.email.trim().toLowerCase().slice(0, 254);
+  const cleanName = sanitizeSpreadsheetCell(data.name.trim()).slice(0, 100);
   const status: CandidateStatus = data.status || 'decision_pending';
   const token = generateSecureToken();
   const now = new Date().toISOString();
@@ -414,12 +426,11 @@ export async function createCandidate(data: {
       if (!supaErr && supaData) {
         newCand = normalizeCandidateRow(supaData);
       }
-    } catch (err: any) {
-      console.warn('Supabase createCandidate failed:', err?.message);
+    } catch (err: unknown) {
+      console.warn('Supabase createCandidate failed:', err instanceof Error ? err.message : String(err));
     }
   }
 
-  // Prepend to memory store so it appears at top of candidate list
   memoryCandidates.unshift(newCand);
   return newCand;
 }
@@ -472,19 +483,25 @@ export interface ImportResult {
   errors: string[];
 }
 
+export const MAX_IMPORT_ROWS = 500;
+
 export async function importCandidates(
   entries: { name: string; email: string }[]
 ): Promise<ImportResult> {
+  if (entries.length > MAX_IMPORT_ROWS) {
+    throw new Error(`Exceeded maximum allowed import count of ${MAX_IMPORT_ROWS} candidates per batch.`);
+  }
+
   let inserted = 0;
   let updated = 0;
   const errors: string[] = [];
 
   for (const entry of entries) {
-    const cleanEmail = entry.email.trim().toLowerCase();
-    const cleanName = entry.name.trim();
+    const cleanEmail = entry.email.trim().toLowerCase().slice(0, 254);
+    const cleanName = sanitizeSpreadsheetCell(entry.name.trim()).slice(0, 100);
 
     if (!cleanEmail || !cleanName) {
-      errors.push(`Skipped row with missing name or email: ${JSON.stringify(entry)}`);
+      errors.push('Skipped row with missing name or email.');
       continue;
     }
 
@@ -516,7 +533,7 @@ export async function importCandidates(
         } else {
           const newId = crypto.randomUUID();
           const appId = 'LCB-2026-' + newId.slice(0, 8).toUpperCase();
-          const insertPayload: Record<string, any> = {
+          const insertPayload: Record<string, unknown> = {
             id: newId,
             application_id: appId,
             full_name: cleanName,
@@ -538,12 +555,12 @@ export async function importCandidates(
             inserted++;
           }
         }
-      } catch (err: any) {
-        console.warn('Supabase import caught error:', err?.message);
+      } catch (err: unknown) {
+        console.warn('Supabase import caught error:', err instanceof Error ? err.message : String(err));
       }
     }
 
-    // Always maintain or update in-memory record on globalThis to guarantee responsiveness
+    // Update in-memory record
     const existingIdx = memoryCandidates.findIndex(
       (c) => c.email.toLowerCase() === cleanEmail
     );
@@ -579,6 +596,8 @@ export async function importCandidates(
 }
 
 export async function deleteCandidate(id: string): Promise<boolean> {
+  if (!id || typeof id !== 'string') return false;
+
   const idx = memoryCandidates.findIndex((c) => c.id === id);
   if (idx !== -1) {
     memoryCandidates.splice(idx, 1);
@@ -603,7 +622,6 @@ export async function resetAllCandidates(): Promise<{ success: boolean; count: n
 
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
-      // Delete all candidates from Supabase
       const { error } = await supabaseAdmin
         .from('candidates')
         .delete()
@@ -612,8 +630,8 @@ export async function resetAllCandidates(): Promise<{ success: boolean; count: n
       if (error) {
         console.warn('Supabase reset candidates notice:', error.message);
       }
-    } catch (err: any) {
-      console.warn('Supabase reset caught error:', err?.message);
+    } catch (err: unknown) {
+      console.warn('Supabase reset caught error:', err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -625,7 +643,6 @@ export async function purgeExpiredCandidates(days = TOKEN_EXPIRATION_DAYS): Prom
   const thresholdIso = new Date(thresholdTime).toISOString();
   let count = 0;
 
-  // Clear expired in-memory entries
   for (let i = memoryCandidates.length - 1; i >= 0; i--) {
     const item = memoryCandidates[i];
     if (new Date(item.created_at).getTime() < thresholdTime) {
@@ -645,11 +662,10 @@ export async function purgeExpiredCandidates(days = TOKEN_EXPIRATION_DAYS): Prom
       if (!error && data) {
         count = Math.max(count, data.length);
       }
-    } catch (err: any) {
-      console.warn('Supabase purge caught error:', err?.message);
+    } catch (err: unknown) {
+      console.warn('Supabase purge caught error:', err instanceof Error ? err.message : String(err));
     }
   }
 
   return { count };
 }
-

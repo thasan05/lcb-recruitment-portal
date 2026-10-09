@@ -26,6 +26,27 @@ export interface EmailSendResult {
 const SENDER_EMAIL = process.env.GMAIL_USER || 'linkedincommunitybangladesh@gmail.com';
 const SENDER_NAME = 'LinkedIn Community Bangladesh';
 
+/**
+ * Escapes untrusted text for safe HTML interpolation to prevent HTML injection / XSS in emails.
+ */
+function escapeHtml(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Sanitizes headers to prevent email header injection (CRLF injection).
+ */
+function sanitizeHeader(val?: string): string {
+  if (!val) return '';
+  return val.replace(/[\r\n]+/g, ' ').trim();
+}
+
 export async function sendCandidateStatusEmail({
   toEmail,
   candidateName,
@@ -36,11 +57,29 @@ export async function sendCandidateStatusEmail({
   customMessage,
   candidateStatus,
 }: SendStatusEmailOptions): Promise<EmailSendResult> {
+  // Validate and sanitize recipient email (prevent CRLF injection)
+  const cleanToEmail = sanitizeHeader(toEmail).toLowerCase();
+  if (!cleanToEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanToEmail)) {
+    return {
+      success: false,
+      error: 'Invalid recipient email address.',
+    };
+  }
+
+  // Validate and sanitize base URL
   const envUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
-  const baseUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
-    ? envUrl
-    : 'https://recruitment.linkedincommunitybangladesh.com';
-  const cleanToken = (secureToken || '').trim().slice(0, 24);
+  let baseUrl = 'https://recruitment.linkedincommunitybangladesh.com';
+  if (envUrl && envUrl.startsWith('https://') && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+    try {
+      const parsed = new URL(envUrl);
+      baseUrl = parsed.origin;
+    } catch {
+      // Fallback to default
+    }
+  }
+
+  // Sanitize token: strictly alphanumeric, max 24 chars
+  const cleanToken = (secureToken || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
   const statusUrl = `${baseUrl.replace(/\/$/, '')}/status/${cleanToken}`;
 
   // Resolve active template based on templateType and candidateStatus
@@ -59,26 +98,36 @@ export async function sendCandidateStatusEmail({
 
   const activeTemplate = EMAIL_TEMPLATES[resolvedType] || EMAIL_TEMPLATES.decision_pending;
 
-  const finalSubject = subject && subject.trim() ? subject.trim() : activeTemplate.subject;
-  const finalHeadline = headline && headline.trim() ? headline.trim() : activeTemplate.headline;
-  const messageBody =
-    customMessage && customMessage.trim() ? customMessage.trim() : activeTemplate.defaultMessage;
+  // Header sanitization for subject (prevents CRLF header injection)
+  const finalSubject = sanitizeHeader(
+    subject && subject.trim() ? subject.trim().slice(0, 200) : activeTemplate.subject
+  );
+  const finalHeadline = headline && headline.trim() ? headline.trim().slice(0, 200) : activeTemplate.headline;
+  const messageBody = customMessage && customMessage.trim() ? customMessage.trim().slice(0, 5000) : activeTemplate.defaultMessage;
   const buttonText = activeTemplate.buttonText;
 
-  // Format message lines for HTML
+  // Sanitize candidate name
+  const safeCandidateName = (candidateName || 'Candidate').trim().slice(0, 100);
+
+  // HTML escaping for all user/dynamic inputs to prevent HTML injection in emails
+  const escapedCandidateName = escapeHtml(safeCandidateName);
+  const escapedHeadline = escapeHtml(finalHeadline);
+  const escapedSubject = escapeHtml(finalSubject);
+  const escapedButtonText = escapeHtml(buttonText);
+
+  // Format message lines for HTML with full HTML escaping
   const formattedHtmlParagraphs = messageBody
     .split(/\n\s*\n/)
-    .map(
-      (para) =>
-        `<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 24px; color: #cbd5e1;">${para
-          .replace(/\n/g, '<br />')
-          .replace(/{name}/g, candidateName)}</p>`
-    )
+    .map((para) => {
+      // Escape HTML in the paragraph first, then substitute {name} safely
+      const escapedPara = escapeHtml(para).replace(/{name}/g, escapedCandidateName);
+      return `<p style="margin: 0 0 16px 0; font-size: 15px; line-height: 24px; color: #cbd5e1;">${escapedPara.replace(/\n/g, '<br />')}</p>`;
+    })
     .join('');
 
-  const plainText = `Dear ${candidateName},
+  const plainText = `Dear ${safeCandidateName},
 
-${messageBody.replace(/{name}/g, candidateName)}
+${messageBody.replace(/{name}/g, safeCandidateName)}
 
 Access your private recruitment status link below:
 ${statusUrl}
@@ -91,12 +140,11 @@ LinkedIn Community Bangladesh
 ${SENDER_EMAIL}
 `;
 
-  const htmlContent = `
-<!DOCTYPE html>
+  const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${finalSubject}</title>
+  <title>${escapedSubject}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #040614; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9;">
   <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #040614; padding: 40px 16px;">
@@ -110,7 +158,7 @@ ${SENDER_EMAIL}
                 LinkedIn Community Bangladesh
               </div>
               <h1 style="margin: 8px 0 0 0; font-size: 21px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">
-                ${finalHeadline}
+                ${escapedHeadline}
               </h1>
             </td>
           </tr>
@@ -119,7 +167,7 @@ ${SENDER_EMAIL}
           <tr>
             <td style="padding: 36px;">
               <p style="margin: 0 0 18px 0; font-size: 17px; line-height: 26px; color: #f8fafc; font-weight: 600;">
-                Dear ${candidateName},
+                Dear ${escapedCandidateName},
               </p>
 
               ${formattedHtmlParagraphs}
@@ -128,8 +176,8 @@ ${SENDER_EMAIL}
               <table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin: 32px 0 28px 0;">
                 <tr>
                   <td align="center" style="border-radius: 10px; background-color: #0a66c2;">
-                    <a href="${statusUrl}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #0a66c2; letter-spacing: -0.01em;">
-                      ${buttonText} &rarr;
+                    <a href="${escapeHtml(statusUrl)}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #0a66c2; letter-spacing: -0.01em;">
+                      ${escapedButtonText} &rarr;
                     </a>
                   </td>
                 </tr>
@@ -139,7 +187,7 @@ ${SENDER_EMAIL}
                 You do not need a password or login credentials. Your unique link provides instant, confidential access.
               </p>
               <p style="margin: 0 0 24px 0; font-size: 12px; color: #64748b; word-break: break-all;">
-                Direct URL: <a href="${statusUrl}" style="color: #38bdf8; text-decoration: underline;">${statusUrl}</a>
+                Direct URL: <a href="${escapeHtml(statusUrl)}" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">${escapeHtml(statusUrl)}</a>
               </p>
 
               <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 28px 0;" />
@@ -148,7 +196,7 @@ ${SENDER_EMAIL}
                 Warm regards,<br />
                 <strong style="color: #ffffff;">Human Resources Committee</strong><br />
                 LinkedIn Community Bangladesh (LCB)<br />
-                <a href="mailto:${SENDER_EMAIL}" style="color: #38bdf8; text-decoration: none;">${SENDER_EMAIL}</a>
+                <a href="mailto:${escapeHtml(SENDER_EMAIL)}" style="color: #38bdf8; text-decoration: none;">${escapeHtml(SENDER_EMAIL)}</a>
               </p>
             </td>
           </tr>
@@ -157,8 +205,7 @@ ${SENDER_EMAIL}
     </tr>
   </table>
 </body>
-</html>
-`;
+</html>`;
 
   // Helper to clean API keys (strips quotes, whitespace, Bearer prefix, and dummy placeholders)
   const cleanApiKey = (raw?: string): string | undefined => {
@@ -172,10 +219,6 @@ ${SENDER_EMAIL}
     return key;
   };
 
-  // Check configured email dispatch providers in priority order:
-  // 1. Resend API (Direct HTTP API, ideal for custom domain & high deliverability without SMTP restrictions)
-  // 2. Custom Domain SMTP (e.g. cPanel, Brevo, SendGrid)
-  // 3. Official Gmail App Password / OAuth2
   const resendApiKey = cleanApiKey(process.env.RESEND_API_KEY);
   const smtpHost = process.env.SMTP_HOST;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
@@ -193,15 +236,6 @@ ${SENDER_EMAIL}
 
   // Safe dev fallback if no provider credentials are set
   if (forceTestMode || !isConfigured) {
-    console.log('\n======================================================');
-    console.log('📨 [EMAIL SIMULATED - DEV MODE]');
-    console.log(`To: ${toEmail} (${candidateName})`);
-    console.log(`From: "${SENDER_NAME}" <${SENDER_EMAIL}>`);
-    console.log(`Subject: ${finalSubject}`);
-    console.log(`Template: ${templateType}`);
-    console.log(`Candidate Link: ${statusUrl}`);
-    console.log('======================================================\n');
-
     return {
       success: true,
       simulated: true,
@@ -210,7 +244,7 @@ ${SENDER_EMAIL}
   }
 
   try {
-    // Provider 1: Resend HTTP API (No port/SMTP blocking, perfect for Vercel + custom domain)
+    // Provider 1: Resend HTTP API
     if (resendApiKey) {
       const fromAddress = (process.env.RESEND_FROM || '').trim().replace(/^["']|["']$/g, '') ||
         `LinkedIn Community Bangladesh <recruitment@linkedincommunitybangladesh.com>`;
@@ -222,7 +256,7 @@ ${SENDER_EMAIL}
         },
         body: JSON.stringify({
           from: fromAddress,
-          to: [toEmail],
+          to: [cleanToEmail],
           reply_to: SENDER_EMAIL,
           subject: finalSubject,
           text: plainText,
@@ -233,19 +267,9 @@ ${SENDER_EMAIL}
       const resendData = await resendRes.json();
       if (!resendRes.ok) {
         const errorMsg = resendData.message || resendData.error || 'Failed to dispatch email via Resend';
-        if (
-          resendRes.status === 401 ||
-          resendRes.status === 400 ||
-          errorMsg.toLowerCase().includes('api key')
-        ) {
-          throw new Error(
-            `Resend API Key Error: "${errorMsg}". Please check Vercel Settings > Environment Variables: Ensure RESEND_API_KEY is configured with your active Resend key (with no surrounding quotes or whitespace), and trigger a Redeploy.`
-          );
-        }
         throw new Error(errorMsg);
       }
 
-      console.log(`✅ [RESEND SENT]: Message dispatched to ${toEmail} (ID: ${resendData.id})`);
       return {
         success: true,
         messageId: resendData.id,
@@ -289,24 +313,27 @@ ${SENDER_EMAIL}
 
     const info = await transporter.sendMail({
       from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
-      to: toEmail,
+      to: cleanToEmail,
       subject: finalSubject,
       text: plainText,
       html: htmlContent,
     });
-
-    console.log(`✅ [EMAIL DISPATCHED]: Sent to ${toEmail} (ID: ${info.messageId})`);
 
     return {
       success: true,
       messageId: info.messageId,
       simulated: false,
     };
-  } catch (error: any) {
-    console.error('❌ Failed to send status email:', error);
+  } catch (error: unknown) {
+    // Redact any credential-looking fragments from error message
+    const errorMsg = error instanceof Error ? error.message : 'Failed to dispatch email notification.';
+    const sanitizedError = errorMsg
+      .replace(/re_[a-zA-Z0-9_-]+/g, '[REDACTED_API_KEY]')
+      .replace(/Bearer\s+[^\s]+/gi, '[REDACTED_BEARER]');
+
     return {
       success: false,
-      error: error?.message || 'Failed to dispatch email notification.',
+      error: sanitizedError,
     };
   }
 }

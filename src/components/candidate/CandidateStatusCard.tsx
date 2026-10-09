@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { CandidatePublicView, STATUS_CONFIG, normalizeCandidateStatus } from '@/types';
-import { CheckCircle2, Clock, XCircle, Sparkles, Copy, Check, ShieldCheck, Share2, Mail } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, Sparkles, Copy, Check, ShieldCheck, Mail } from 'lucide-react';
 import { LCBLogo } from '@/components/LCBLogo';
 import { formatLastUpdated } from '@/lib/date-format';
 
@@ -12,12 +12,14 @@ interface Props {
 
 export function CandidateStatusCard({ candidate }: Props) {
   const [liveCandidate, setLiveCandidate] = useState<CandidatePublicView>(candidate);
+  const [prevCandidate, setPrevCandidate] = useState<CandidatePublicView>(candidate);
   const [copied, setCopied] = useState(false);
 
   // Sync state if candidate prop changes
-  React.useEffect(() => {
+  if (candidate !== prevCandidate) {
+    setPrevCandidate(candidate);
     setLiveCandidate(candidate);
-  }, [candidate]);
+  }
 
   // Real-time synchronization: Fetch live status immediately on client load
   React.useEffect(() => {

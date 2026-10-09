@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAdminAuth } from '@/lib/auth';
+import { checkAdminAuth, verifyCsrfOrigin } from '@/lib/auth';
 import { updateCandidateDetails, deleteCandidate } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
@@ -17,9 +17,21 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(request)) {
+    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+
   const { id } = await params;
+  if (!id || typeof id !== 'string' || id.length > 64) {
+    return NextResponse.json({ error: 'Invalid candidate ID.' }, { status: 400 });
+  }
 
   try {
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    if (contentLength > 32768) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+
     const body = await request.json();
     const { name, email, status } = body;
 
@@ -30,18 +42,27 @@ export async function PATCH(
       );
     }
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()) || String(email).trim().length > 254)) {
       return NextResponse.json(
-        { error: 'Invalid email address format.' },
+        { error: 'Invalid email address format or length exceeds 254 characters.' },
         { status: 400 }
       );
     }
 
-    if (name !== undefined && String(name).trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Name cannot be empty.' },
-        { status: 400 }
-      );
+    if (name !== undefined) {
+      const cleanName = String(name).trim();
+      if (cleanName.length === 0) {
+        return NextResponse.json(
+          { error: 'Name cannot be empty.' },
+          { status: 400 }
+        );
+      }
+      if (cleanName.length > 100) {
+        return NextResponse.json(
+          { error: 'Name cannot exceed 100 characters.' },
+          { status: 400 }
+        );
+      }
     }
 
     const updated = await updateCandidateDetails(id, {
@@ -55,8 +76,8 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true, candidate: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Failed to update candidate' }, { status: 500 });
   }
 }
 
@@ -69,12 +90,22 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(request)) {
+    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+
   const { id } = await params;
+  if (!id || typeof id !== 'string' || id.length > 64) {
+    return NextResponse.json({ error: 'Invalid candidate ID.' }, { status: 400 });
+  }
 
   try {
     const success = await deleteCandidate(id);
-    return NextResponse.json({ success });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    if (!success) {
+      return NextResponse.json({ error: 'Candidate not found or already deleted.' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Failed to delete candidate' }, { status: 500 });
   }
 }

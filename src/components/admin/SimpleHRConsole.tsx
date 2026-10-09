@@ -18,7 +18,6 @@ import {
   Mail,
   Sparkles,
   Clock,
-  KeyRound,
   Trash2,
   UserPlus,
   Pencil,
@@ -127,36 +126,42 @@ export function SimpleHRConsole() {
       } else {
         alert(data.error || 'Failed to reset candidate database.');
       }
-    } catch (err: any) {
-      alert('Failed to reset candidate list: ' + err.message);
+    } catch (err: unknown) {
+      alert('Failed to reset candidate list: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setResetting(false);
     }
   };
 
-  // Fetch candidates from API
-  const loadCandidates = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/admin/candidates${search ? `?q=${encodeURIComponent(search)}` : ''}`);
-      if (res.status === 401) {
-        window.location.href = '/';
-        return;
-      }
-      const data = await res.json();
-      if (data.candidates) {
-        setCandidates(data.candidates);
-      }
-    } catch (err) {
-      console.error('Failed to load candidates:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const loadCandidates = () => setRefreshTrigger((prev) => prev + 1);
 
   useEffect(() => {
-    loadCandidates();
-  }, [search]);
+    let ignore = false;
+    const fetchCandidates = async () => {
+      try {
+        const res = await fetch(`/api/admin/candidates${search ? `?q=${encodeURIComponent(search)}` : ''}`);
+        if (res.status === 401) {
+          window.location.href = '/';
+          return;
+        }
+        const data = await res.json();
+        if (!ignore && data.candidates) {
+          setCandidates(data.candidates);
+        }
+      } catch (err) {
+        console.error('Failed to load candidates:', err);
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchCandidates();
+    return () => {
+      ignore = true;
+    };
+  }, [search, refreshTrigger]);
 
   // Handle Logout
   const handleLogout = async () => {
@@ -166,6 +171,25 @@ export function SimpleHRConsole() {
 
   // Intelligent column & multi-sheet detection for Excel / CSV (supports Google Sheets Username, Full Name :, etc.)
   const parseSpreadsheetFile = async (file: File) => {
+    // Enforce 5 MB maximum file size limit
+    const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setImportMessage({
+        type: 'error',
+        text: 'The uploaded file exceeds the 5 MB maximum file size limit.',
+      });
+      return;
+    }
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xls') && !lowerName.endsWith('.csv')) {
+      setImportMessage({
+        type: 'error',
+        text: 'Invalid file format. Only .xlsx, .xls, and .csv files are supported.',
+      });
+      return;
+    }
+
     setImporting(true);
     setImportMessage(null);
 
@@ -180,7 +204,7 @@ export function SimpleHRConsole() {
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const cleanHeaderStr = (val: any) =>
+      const cleanHeaderStr = (val: unknown) =>
         String(val ?? '')
           .trim()
           .toLowerCase()
@@ -251,7 +275,7 @@ export function SimpleHRConsole() {
         if (!worksheet) continue;
 
         // Convert to 2D array of rows
-        const rawGrid: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+        const rawGrid: unknown[][] = XLSX.utils.sheet_to_json(worksheet, {
           header: 1,
           blankrows: false,
           defval: '',
@@ -444,8 +468,11 @@ export function SimpleHRConsole() {
         });
         loadCandidates();
       }
-    } catch (err: any) {
-      setImportMessage({ type: 'error', text: `Failed to process spreadsheet: ${err.message}` });
+    } catch (err: unknown) {
+      setImportMessage({
+        type: 'error',
+        text: `Failed to process spreadsheet: ${err instanceof Error ? err.message : String(err)}`,
+      });
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -511,8 +538,8 @@ export function SimpleHRConsole() {
         );
         setTimeout(() => setLastEmailToast(null), 5000);
       }
-    } catch (err: any) {
-      alert('Network error while saving candidate status: ' + err.message);
+    } catch (err: unknown) {
+      alert('Network error while saving candidate status: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setSavingIdMap((prev) => ({ ...prev, [id]: false }));
     }
@@ -576,8 +603,8 @@ export function SimpleHRConsole() {
         `✅ Successfully saved ${targetCandidates.length} candidate(s) to the database! All tracking links are now synced.`
       );
       setTimeout(() => setLastEmailToast(null), 6000);
-    } catch (err: any) {
-      alert('Failed to save candidates: ' + err.message);
+    } catch (err: unknown) {
+      alert('Failed to save candidates: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsSavingAll(false);
     }
@@ -626,14 +653,14 @@ export function SimpleHRConsole() {
   };
 
   // Helper to ensure clean shortened 24-character token
-  const getCleanToken = (token: string, id: string) => {
+  const getCleanToken = (token: string) => {
     return (token || '').trim().slice(0, 24);
   };
 
   // Copy private URL helper
   const handleCopyLink = (token: string, id: string) => {
     const origin = window.location.origin;
-    const cleanToken = getCleanToken(token, id);
+    const cleanToken = getCleanToken(token);
     const url = `${origin}/status/${cleanToken}`;
     navigator.clipboard.writeText(url);
     setCopiedId(id);
@@ -879,7 +906,6 @@ export function SimpleHRConsole() {
                 ) : (
                   candidates.map((candidate) => {
                     const meta = STATUS_CONFIG[candidate.status] || STATUS_CONFIG.decision_pending;
-                    const isPending = candidate.status === 'decision_pending';
                     const hasUpdatedDecision = candidate.status === 'accepted' || candidate.status === 'rejected';
 
                     return (
@@ -903,7 +929,7 @@ export function SimpleHRConsole() {
                               )}
                             </button>
                             <a
-                              href={`/status/${getCleanToken(candidate.secure_token, candidate.id)}`}
+                              href={`/status/${getCleanToken(candidate.secure_token)}`}
                               target="_blank"
                               rel="noreferrer"
                               title="Preview candidate status page"
@@ -1057,7 +1083,7 @@ export function SimpleHRConsole() {
                             ) : (
                               <>
                                 <Mail className="h-3.5 w-3.5" />
-                                <span>Send 'Pending' Mail</span>
+                                <span>Send &apos;Pending&apos; Mail</span>
                               </>
                             )}
                           </button>

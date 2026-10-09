@@ -12,7 +12,6 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  Sparkles,
 } from 'lucide-react';
 
 export function HRLoginPage() {
@@ -49,8 +48,9 @@ export function HRLoginPage() {
       // Route smoothly into the HR Console
       router.push('/admin');
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials and try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Login failed. Please check your credentials and try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAdminAuth } from '@/lib/auth';
+import { checkAdminAuth, verifyCsrfOrigin } from '@/lib/auth';
 import { getCandidates, resetAllCandidates, createCandidate, updateCandidateDetails } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+const VALID_STATUSES: CandidateStatus[] = ['decision_pending', 'accepted', 'rejected'];
 
 export async function GET(request: NextRequest) {
   const isAdmin = await checkAdminAuth();
@@ -17,9 +19,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const candidates = await getCandidates(q);
-    return NextResponse.json({ candidates });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { candidates },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
+  } catch {
+    return NextResponse.json({ error: 'Failed to retrieve candidates' }, { status: 500 });
   }
 }
 
@@ -29,19 +38,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(request)) {
+    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+
   try {
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    if (contentLength > 65536) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+
     const body = await request.json();
     const { name, email, status } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json({ error: 'Full name is required.' }, { status: 400 });
     }
+    if (name.trim().length > 100) {
+      return NextResponse.json({ error: 'Full name exceeds 100 character limit.' }, { status: 400 });
+    }
 
     if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return NextResponse.json({ error: 'A valid email address is required.' }, { status: 400 });
     }
+    if (email.trim().length > 254) {
+      return NextResponse.json({ error: 'Email exceeds 254 character limit.' }, { status: 400 });
+    }
 
-    const validStatus: CandidateStatus = ['decision_pending', 'accepted', 'rejected'].includes(status)
+    const validStatus: CandidateStatus = VALID_STATUSES.includes(status)
       ? status
       : 'decision_pending';
 
@@ -56,8 +80,8 @@ export async function POST(request: NextRequest) {
       message: `Candidate ${newCandidate.name} created successfully.`,
       candidate: newCandidate,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Failed to create candidate' }, { status: 500 });
   }
 }
 
@@ -67,7 +91,16 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(request)) {
+    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+
   try {
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    if (contentLength > 524288) { // 512 KB
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+
     const body = await request.json();
     const updates = Array.isArray(body?.updates) ? body.updates : [];
 
@@ -75,13 +108,25 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
+    if (updates.length > 500) {
+      return NextResponse.json({ error: 'Too many updates in a single request (max 500).' }, { status: 400 });
+    }
+
     const updatedCandidates = [];
     for (const item of updates) {
-      if (item && item.id) {
+      if (item && item.id && typeof item.id === 'string') {
+        const itemStatus: CandidateStatus | undefined =
+          item.status && VALID_STATUSES.includes(item.status) ? item.status : undefined;
+        const itemName = typeof item.name === 'string' ? item.name.trim().slice(0, 100) : undefined;
+        const itemEmail =
+          typeof item.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email.trim())
+            ? item.email.trim().toLowerCase().slice(0, 254)
+            : undefined;
+
         const updated = await updateCandidateDetails(item.id, {
-          name: item.name,
-          email: item.email,
-          status: item.status,
+          name: itemName,
+          email: itemEmail,
+          status: itemStatus,
         });
         if (updated) {
           updatedCandidates.push(updated);
@@ -94,8 +139,8 @@ export async function PATCH(request: NextRequest) {
       updatedCount: updatedCandidates.length,
       candidates: updatedCandidates,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Failed to update candidates' }, { status: 500 });
   }
 }
 
@@ -105,6 +150,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(request)) {
+    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+
   try {
     const result = await resetAllCandidates();
     return NextResponse.json({
@@ -112,7 +161,7 @@ export async function DELETE(request: NextRequest) {
       message: 'Candidate list has been successfully reset.',
       count: result.count,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Failed to reset candidate database' }, { status: 500 });
   }
 }
