@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Candidate, CandidateStatus, CandidatePublicView, normalizeCandidateStatus } from '@/types';
 import { isSupabaseConfigured, supabaseAdmin, supabaseClient } from '../supabase';
+import seedCandidatesRaw from './candidates-seed.json';
 
 // Compact cryptographic token length: 24 hex characters (96 bits of entropy, unguessable, short & mobile-friendly)
 export const SECURE_TOKEN_LENGTH = 24;
@@ -45,68 +46,7 @@ const globalStore = globalThis as unknown as {
   __lcbCandidates?: Candidate[];
 };
 
-if (!globalStore.__lcbCandidates) {
-  if (isSupabaseConfigured()) {
-    globalStore.__lcbCandidates = [];
-  } else {
-    const currentTimestamp = new Date().toISOString();
-    globalStore.__lcbCandidates = [
-      {
-        id: 'c1111111-1111-1111-1111-111111111111',
-        name: 'Tanvir Hasan',
-        email: 'tanvir@example.com',
-        status: 'decision_pending',
-        secure_token: '9c7a2e8f1b4d05638a192e74',
-        email_sent: true,
-        email_sent_at: currentTimestamp,
-        created_at: currentTimestamp,
-        updated_at: currentTimestamp,
-      },
-      {
-        id: 'c2222222-2222-2222-2222-222222222222',
-        name: 'Sadia Akter',
-        email: 'sadia@example.com',
-        status: 'accepted',
-        secure_token: '4e81a95b0c2d7f36918234e7',
-        email_sent: false,
-        email_sent_at: null,
-        created_at: currentTimestamp,
-        updated_at: currentTimestamp,
-      },
-      {
-        id: 'c3333333-3333-3333-3333-333333333333',
-        name: 'Rahim Ahmed',
-        email: 'rahim@example.com',
-        status: 'rejected',
-        secure_token: '7b0294e5d1a8c3f6902518e7',
-        email_sent: false,
-        email_sent_at: null,
-        created_at: currentTimestamp,
-        updated_at: currentTimestamp,
-      },
-      {
-        id: 'c4444444-4444-4444-4444-444444444444',
-        name: 'Nusrat Jahan',
-        email: 'nusrat@example.com',
-        status: 'rejected',
-        secure_token: '2f90a84e3b1c7d65019284e5',
-        email_sent: true,
-        email_sent_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-        created_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-      },
-    ];
-  }
-}
-
-const memoryCandidates: Candidate[] = globalStore.__lcbCandidates;
-
-// Proactively sanitize all existing memory candidate tokens to guarantee 24-character hex format with ZERO names
-for (const cand of memoryCandidates) {
-  cand.secure_token = ensureHashedToken(cand.secure_token, cand.id);
-}
-
-// Helper to normalize Supabase row to Candidate interface
+// Helper to normalize Supabase or seed row to Candidate interface
 function normalizeCandidateRow(row: any): Candidate {
   return {
     id: row.id,
@@ -116,9 +56,21 @@ function normalizeCandidateRow(row: any): Candidate {
     secure_token: ensureHashedToken(row.secure_token, row.id),
     email_sent: Boolean(row.email_sent),
     email_sent_at: row.email_sent_at || null,
-    created_at: row.created_at || new Date().toISOString(),
+    created_at: row.created_at || row.application_date || new Date().toISOString(),
     updated_at: row.updated_at || row.last_updated || new Date().toISOString(),
   };
+}
+
+if (!globalStore.__lcbCandidates) {
+  const seeded = (seedCandidatesRaw as any[]).map((row) => normalizeCandidateRow(row));
+  globalStore.__lcbCandidates = seeded;
+}
+
+const memoryCandidates: Candidate[] = globalStore.__lcbCandidates;
+
+// Proactively sanitize all existing memory candidate tokens to guarantee 24-character hex format with ZERO names
+for (const cand of memoryCandidates) {
+  cand.secure_token = ensureHashedToken(cand.secure_token, cand.id);
 }
 
 export async function getCandidates(searchQuery?: string): Promise<Candidate[]> {
