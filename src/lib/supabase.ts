@@ -1,16 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://ehjndqfgdebuoiwdxttg.supabase.co';
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+const JWT_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoam5kcWZnZGVidW9pd2R4dHRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NTc5MzUsImV4cCI6MjEwNjQzMzkzNX0.KuQonlxEBnBDQDh04w7BP_JKJMh0TmAHfWYZ1j9588s';
-const supabaseServiceRoleKey =
+
+const supabaseUrl =
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().startsWith('http')
+    ? process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+    : 'https://ehjndqfgdebuoiwdxttg.supabase.co';
+
+const resolveKey = (key?: string) => {
+  if (key && key.trim().startsWith('eyJ')) {
+    return key.trim();
+  }
+  return JWT_KEY;
+};
+
+const supabaseAnonKey = resolveKey(
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);
+
+const supabaseServiceRoleKey = resolveKey(
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SECRET_KEY ||
-  supabaseAnonKey;
+  process.env.SUPABASE_SECRET_KEY
+);
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(

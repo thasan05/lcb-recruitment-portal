@@ -215,6 +215,24 @@ export async function getCandidateBySecureToken(
   // 1. Query Supabase FIRST if configured (primary authoritative database)
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
+      // Direct token match query
+      const { data: directRows } = await supabaseAdmin
+        .from('candidates')
+        .select('*')
+        .ilike('secure_token', `%${cleanToken.slice(0, 16)}%`)
+        .order('last_updated', { ascending: false });
+
+      if (directRows && directRows.length > 0) {
+        for (const row of directRows) {
+          const canonical = ensureHashedToken(row.secure_token, row.id);
+          if (matchesCandidate(row.secure_token, row.id)) {
+            const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
+            return toPublicView(row, canonical, !isExactCanonical);
+          }
+        }
+      }
+
+      // Full table scan fallback in Supabase
       const { data: allRows, error } = await supabaseAdmin
         .from('candidates')
         .select('*')
