@@ -20,9 +20,14 @@ import {
   Clock,
   KeyRound,
   Trash2,
+  UserPlus,
+  Pencil,
 } from 'lucide-react';
 import { LCBLogo } from '@/components/LCBLogo';
 import { EmailComposeModal } from '@/components/admin/EmailComposeModal';
+import { CandidateFormModal } from '@/components/admin/CandidateFormModal';
+import { DeleteCandidateModal } from '@/components/admin/DeleteCandidateModal';
+import { BatchEmailModal } from '@/components/admin/BatchEmailModal';
 import { formatLastUpdated } from '@/lib/date-format';
 
 export function SimpleHRConsole() {
@@ -39,9 +44,63 @@ export function SimpleHRConsole() {
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [lastEmailToast, setLastEmailToast] = useState<string | null>(null);
 
+  // Candidate Add / Edit modal state
+  const [candidateFormOpen, setCandidateFormOpen] = useState(false);
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+
+  // Single candidate delete modal state
+  const [deletingCandidate, setDeletingCandidate] = useState<Candidate | null>(null);
+
+  // Batch Email modal state
+  const [batchEmailModalOpen, setBatchEmailModalOpen] = useState(false);
+
   // Reset candidate database state
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  const handleOpenAddCandidate = () => {
+    setEditingCandidate(null);
+    setCandidateFormOpen(true);
+  };
+
+  const handleOpenEditCandidate = (cand: Candidate) => {
+    setEditingCandidate(cand);
+    setCandidateFormOpen(true);
+  };
+
+  const handleCandidateSaved = (saved: Candidate, isNew: boolean) => {
+    if (isNew) {
+      setCandidates((prev) => [saved, ...prev]);
+      setLastEmailToast(`✅ Successfully added candidate "${saved.name}".`);
+    } else {
+      setCandidates((prev) => prev.map((c) => (c.id === saved.id ? saved : c)));
+      setLastEmailToast(`✅ Successfully updated details for "${saved.name}".`);
+    }
+    setTimeout(() => setLastEmailToast(null), 5000);
+  };
+
+  const handleCandidateDeleted = (id: string) => {
+    const deleted = candidates.find((c) => c.id === id);
+    setCandidates((prev) => prev.filter((c) => c.id !== id));
+    if (deleted) {
+      setLastEmailToast(`🗑️ Removed candidate "${deleted.name}".`);
+      setTimeout(() => setLastEmailToast(null), 5000);
+    }
+  };
+
+  const handleBatchCandidateUpdated = (updatedId: string) => {
+    setCandidates((prev) =>
+      prev.map((c) =>
+        c.id === updatedId
+          ? {
+              ...c,
+              email_sent: true,
+              email_sent_at: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+  };
 
   // Clear / Reset candidate database
   const handleResetList = async () => {
@@ -577,7 +636,7 @@ export function SimpleHRConsole() {
         {/* Candidate List Table Section */}
         <section className="glass-panel rounded-3xl border border-white/10 shadow-xl overflow-hidden">
           {/* Table Header Controls */}
-          <div className="p-4 sm:p-6 border-b border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-4 sm:p-6 border-b border-white/[0.08] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h2 className="text-base sm:text-lg font-bold text-white">
@@ -589,12 +648,15 @@ export function SimpleHRConsole() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                {candidates.length} {candidates.length === 1 ? 'candidate' : 'candidates'} enrolled
+                {candidates.length} {candidates.length === 1 ? 'candidate' : 'candidates'} enrolled &bull;{' '}
+                <span className="text-cyan-400 font-medium">
+                  {candidates.filter((c) => !c.email_sent).length} unsent
+                </span>
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-              <div className="relative max-w-xs w-full">
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+              <div className="relative max-w-xs w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
@@ -605,6 +667,35 @@ export function SimpleHRConsole() {
                 />
               </div>
 
+              {/* Manually Add Candidate */}
+              <button
+                type="button"
+                onClick={handleOpenAddCandidate}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all shadow-md shadow-emerald-600/20 hover:scale-[1.02] active:scale-[0.98]"
+                title="Manually add a single candidate"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Add Candidate</span>
+              </button>
+
+              {/* Send All Emails in Batch */}
+              <button
+                type="button"
+                disabled={candidates.length === 0}
+                onClick={() => setBatchEmailModalOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/30 hover:scale-[1.02] active:scale-[0.98]"
+                title="Dispatch recruitment emails to all candidates automatically"
+              >
+                <Send className="h-3.5 w-3.5" />
+                <span>Send All Emails</span>
+                {candidates.filter((c) => !c.email_sent).length > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-white/20 text-white">
+                    {candidates.filter((c) => !c.email_sent).length}
+                  </span>
+                )}
+              </button>
+
+              {/* Reset List */}
               <button
                 type="button"
                 disabled={candidates.length === 0 || resetting}
@@ -656,8 +747,8 @@ export function SimpleHRConsole() {
                       >
                         {/* Name + Link Actions */}
                         <td className="py-4 px-4 sm:px-6 font-medium text-white">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-white">{candidate.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-white mr-1">{candidate.name}</span>
                             <button
                               onClick={() => handleCopyLink(candidate.secure_token, candidate.id)}
                               title="Copy candidate's private tracking link"
@@ -678,6 +769,22 @@ export function SimpleHRConsole() {
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCandidate(candidate)}
+                              title="Edit candidate name, email, or status"
+                              className="p-1 rounded text-slate-500 hover:text-blue-400 hover:bg-white/[0.04] transition-colors"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingCandidate(candidate)}
+                              title="Delete candidate from database"
+                              className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-white/[0.04] transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
 
@@ -836,6 +943,36 @@ export function SimpleHRConsole() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Candidate Add / Edit Form Modal */}
+      {candidateFormOpen && (
+        <CandidateFormModal
+          isOpen={candidateFormOpen}
+          onClose={() => setCandidateFormOpen(false)}
+          candidate={editingCandidate}
+          onSaved={handleCandidateSaved}
+        />
+      )}
+
+      {/* Delete Single Candidate Modal */}
+      {deletingCandidate && (
+        <DeleteCandidateModal
+          isOpen={Boolean(deletingCandidate)}
+          onClose={() => setDeletingCandidate(null)}
+          candidate={deletingCandidate}
+          onDeleted={handleCandidateDeleted}
+        />
+      )}
+
+      {/* Batch Email Dispatch Modal */}
+      {batchEmailModalOpen && (
+        <BatchEmailModal
+          isOpen={batchEmailModalOpen}
+          onClose={() => setBatchEmailModalOpen(false)}
+          candidates={candidates}
+          onCandidateUpdated={handleBatchCandidateUpdated}
+        />
       )}
     </div>
   );

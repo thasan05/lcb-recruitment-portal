@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { updateCandidateStatus, deleteCandidate } from '@/lib/db';
+import { updateCandidateDetails, deleteCandidate } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
 const VALID_STATUSES: CandidateStatus[] = ['decision_pending', 'accepted', 'rejected'];
@@ -18,16 +18,35 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { status } = body;
+    const { name, email, status } = body;
 
-    if (!status || !VALID_STATUSES.includes(status)) {
+    if (status && !VALID_STATUSES.includes(status)) {
       return NextResponse.json(
         { error: 'Invalid status. Must be decision_pending, accepted, or rejected.' },
         { status: 400 }
       );
     }
 
-    const updated = await updateCandidateStatus(id, status);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+      return NextResponse.json(
+        { error: 'Invalid email address format.' },
+        { status: 400 }
+      );
+    }
+
+    if (name !== undefined && String(name).trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Name cannot be empty.' },
+        { status: 400 }
+      );
+    }
+
+    const updated = await updateCandidateDetails(id, {
+      name: name !== undefined ? String(name).trim() : undefined,
+      email: email !== undefined ? String(email).trim().toLowerCase() : undefined,
+      status: status as CandidateStatus | undefined,
+    });
+
     if (!updated) {
       return NextResponse.json({ error: 'Candidate not found.' }, { status: 404 });
     }

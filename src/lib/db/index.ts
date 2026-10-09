@@ -348,6 +348,112 @@ export async function updateCandidateStatus(
   return null;
 }
 
+export async function updateCandidateDetails(
+  id: string,
+  updates: {
+    name?: string;
+    email?: string;
+    status?: CandidateStatus;
+  }
+): Promise<Candidate | null> {
+  const now = new Date().toISOString();
+  const cleanName = updates.name ? updates.name.trim() : undefined;
+  const cleanEmail = updates.email ? updates.email.trim().toLowerCase() : undefined;
+
+  // Update memory store
+  const idx = memoryCandidates.findIndex((c) => c.id === id);
+  let updatedCandidate: Candidate | null = null;
+
+  if (idx !== -1) {
+    memoryCandidates[idx] = {
+      ...memoryCandidates[idx],
+      ...(cleanName ? { name: cleanName } : {}),
+      ...(cleanEmail ? { email: cleanEmail } : {}),
+      ...(updates.status ? { status: updates.status } : {}),
+      updated_at: now,
+    };
+    updatedCandidate = memoryCandidates[idx];
+  }
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const patchObj: Record<string, any> = { last_updated: now };
+      if (cleanName) patchObj.full_name = cleanName;
+      if (cleanEmail) patchObj.email = cleanEmail;
+      if (updates.status) patchObj.status = updates.status;
+
+      const { data, error } = await supabaseAdmin
+        .from('candidates')
+        .update(patchObj)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+
+      if (!error && data) {
+        const norm = normalizeCandidateRow(data);
+        norm.updated_at = now;
+        return norm;
+      }
+    } catch (err) {
+      console.warn('Supabase candidate update failed:', err);
+    }
+  }
+
+  return updatedCandidate;
+}
+
+export async function createCandidate(data: {
+  name: string;
+  email: string;
+  status?: CandidateStatus;
+}): Promise<Candidate> {
+  const cleanEmail = data.email.trim().toLowerCase();
+  const cleanName = data.name.trim();
+  const status: CandidateStatus = data.status || 'decision_pending';
+  const token = generateSecureToken();
+  const now = new Date().toISOString();
+  const newId = crypto.randomUUID();
+
+  const newCand: Candidate = {
+    id: newId,
+    name: cleanName,
+    email: cleanEmail,
+    status,
+    secure_token: token,
+    email_sent: false,
+    email_sent_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    try {
+      const appId = 'LCB-2026-' + Math.floor(1000 + Math.random() * 9000);
+      await supabaseAdmin.from('candidates').insert({
+        id: newId,
+        application_id: appId,
+        full_name: cleanName,
+        email: cleanEmail,
+        phone: 'N/A',
+        position: 'Applicant',
+        department: 'General',
+        campaign: 'LCB Central Team Recruitment — 2026',
+        status,
+        secure_token: token,
+        application_date: now,
+        last_updated: now,
+        created_at: now,
+      });
+    } catch (err: any) {
+      console.warn('Supabase createCandidate failed:', err?.message);
+    }
+  }
+
+  // Prepend to memory store so it appears at top of candidate list
+  memoryCandidates.unshift(newCand);
+  return newCand;
+}
+
 export async function markEmailSent(id: string): Promise<Candidate | null> {
   const now = new Date().toISOString();
 
