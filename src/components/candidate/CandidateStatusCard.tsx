@@ -80,7 +80,7 @@ export function CandidateStatusCard({ candidate }: Props) {
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-amber-500/10 border border-amber-500/30 text-amber-300">
                 <Clock className="h-3.5 w-3.5 text-amber-400" />
-                <span>Link Expired (30 Days)</span>
+                <span>Link Expired (90 Days)</span>
               </span>
             </div>
           </div>
@@ -95,7 +95,7 @@ export function CandidateStatusCard({ candidate }: Props) {
               Recruitment Cycle Concluded
             </h2>
             <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-              Hello, <strong className="text-white">{candidate.name}</strong>. This private candidate tracking link has reached its 30-day security threshold and is now archived.
+              Hello, <strong className="text-white">{candidate.name}</strong>. This private candidate tracking link has reached its 90-day security threshold and is now archived.
             </p>
 
             {/* Archived Status Info */}
@@ -119,7 +119,7 @@ export function CandidateStatusCard({ candidate }: Props) {
             {/* Privacy & Resource Preservation Notice */}
             <div className="mt-6 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-slate-400 leading-relaxed">
               <p>
-                <strong className="text-slate-300">Why did this link expire?</strong> To safeguard applicant privacy, prevent unauthorized access to archived recruitment evaluations, and optimize portal resources, candidate tokens expire automatically after 30 days.
+                <strong className="text-slate-300">Why did this link expire?</strong> To safeguard applicant privacy, prevent unauthorized access to archived recruitment evaluations, and optimize portal resources, candidate tokens expire automatically after 90 days.
               </p>
             </div>
 
