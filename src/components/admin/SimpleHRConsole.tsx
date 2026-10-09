@@ -97,7 +97,7 @@ export function SimpleHRConsole() {
     window.location.href = '/admin/login';
   };
 
-  // Intelligent column detection for Excel / CSV
+  // Intelligent column & multi-sheet detection for Excel / CSV (supports Google Sheets Username, Full Name :, etc.)
   const parseSpreadsheetFile = async (file: File) => {
     setImporting(true);
     setImportMessage(null);
@@ -105,72 +105,266 @@ export function SimpleHRConsole() {
     try {
       const dataBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(dataBuffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      if (rawRows.length === 0) {
-        setImportMessage({ type: 'error', text: 'The uploaded file contains no data rows.' });
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        setImportMessage({ type: 'error', text: 'The uploaded file contains no sheets or readable data.' });
         setImporting(false);
         return;
       }
 
-      // Detect column keys
-      const sampleRow = rawRows[0];
-      const keys = Object.keys(sampleRow);
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const cleanHeaderStr = (val: any) =>
+        String(val ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/[:_\-–—*?#$|()[\]{}]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
 
-      const findKey = (patterns: RegExp[]): string | undefined => {
-        for (const pattern of patterns) {
-          const match = keys.find((k) => pattern.test(k.trim()));
-          if (match) return match;
-        }
-        return undefined;
+      const isEmailHeader = (h: string) => {
+        return (
+          h === 'username' ||
+          h === 'user name' ||
+          h === 'user' ||
+          h === 'userid' ||
+          h === 'user id' ||
+          h.includes('email') ||
+          h.includes('mail') ||
+          h.includes('gmail') ||
+          h.startsWith('user') ||
+          h.endsWith('username')
+        );
       };
 
-      const nameKey = findKey([
-        /^name$/i,
-        /^full[\s_-]?name$/i,
-        /^candidate[\s_-]?name$/i,
-        /name/i,
-      ]);
+      const isNameHeader = (h: string) => {
+        // Exclude headers that represent organizations, universities, departments, parents, etc.
+        if (
+          h.includes('university') ||
+          h.includes('dept') ||
+          h.includes('department') ||
+          h.includes('institute') ||
+          h.includes('college') ||
+          h.includes('school') ||
+          h.includes('company') ||
+          h.includes('father') ||
+          h.includes('mother')
+        ) {
+          return false;
+        }
+        return (
+          h === 'full name' ||
+          h === 'fullname' ||
+          h === 'name' ||
+          h === 'candidate name' ||
+          h === 'candidate' ||
+          h === 'applicant name' ||
+          h === 'applicant' ||
+          h === 'participant name' ||
+          h === 'participant' ||
+          h === 'student name' ||
+          h === 'student' ||
+          h.startsWith('name') ||
+          h.endsWith('name')
+        );
+      };
 
-      const emailKey = findKey([
-        /^email$/i,
-        /^email[\s_-]?address$/i,
-        /^mail$/i,
-        /email/i,
-      ]);
+      interface SheetCandidateParseResult {
+        sheetName: string;
+        candidates: { name: string; email: string }[];
+        detectedEmailHeader: string;
+        detectedNameHeader: string;
+        totalRawRows: number;
+      }
 
-      if (!nameKey || !emailKey) {
+      const sheetResults: SheetCandidateParseResult[] = [];
+
+      // Scan each sheet in the workbook to handle multi-tab Google Sheets or Excel files
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) continue;
+
+        // Convert to 2D array of rows
+        const rawGrid: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          blankrows: false,
+          defval: '',
+        });
+
+        if (!rawGrid || rawGrid.length === 0) continue;
+
+        // 1. Attempt to find the header row among the first 15 rows
+        let headerRowIdx = -1;
+        let emailColIdx = -1;
+        let nameColIdx = -1;
+        let detectedEmailTitle = '';
+        let detectedNameTitle = '';
+
+        const maxHeaderSearchRows = Math.min(rawGrid.length, 15);
+        for (let r = 0; r < maxHeaderSearchRows; r++) {
+          const row = rawGrid[r];
+          if (!Array.isArray(row)) continue;
+
+          let foundEmailCol = -1;
+          let foundNameCol = -1;
+          let tempEmailTitle = '';
+          let tempNameTitle = '';
+
+          for (let c = 0; c < row.length; c++) {
+            const rawCell = String(row[c] ?? '').trim();
+            const clean = cleanHeaderStr(rawCell);
+            if (!clean) continue;
+
+            if (foundEmailCol === -1 && isEmailHeader(clean)) {
+              foundEmailCol = c;
+              tempEmailTitle = rawCell;
+            } else if (foundNameCol === -1 && isNameHeader(clean)) {
+              foundNameCol = c;
+              tempNameTitle = rawCell;
+            }
+          }
+
+          // If this row contains both or at least the email header
+          if (foundEmailCol !== -1 && foundNameCol !== -1) {
+            headerRowIdx = r;
+            emailColIdx = foundEmailCol;
+            nameColIdx = foundNameCol;
+            detectedEmailTitle = tempEmailTitle;
+            detectedNameTitle = tempNameTitle;
+            break;
+          } else if (foundEmailCol !== -1 && headerRowIdx === -1) {
+            // Found email column, keep searching for name or save as fallback
+            headerRowIdx = r;
+            emailColIdx = foundEmailCol;
+            detectedEmailTitle = tempEmailTitle;
+          }
+        }
+
+        // 2. If email column or name column was not found from headers, try value-based heuristic
+        if (emailColIdx === -1 || nameColIdx === -1) {
+          const sampleRows = rawGrid.slice(Math.max(0, headerRowIdx + 1), Math.max(0, headerRowIdx + 1) + 25);
+          const maxCols = Math.max(...sampleRows.map((row) => (Array.isArray(row) ? row.length : 0)), 0);
+
+          // Find column with the most valid emails
+          if (emailColIdx === -1 && maxCols > 0) {
+            let bestEmailCol = -1;
+            let bestEmailCount = 0;
+
+            for (let c = 0; c < maxCols; c++) {
+              let emailCount = 0;
+              for (const row of sampleRows) {
+                if (!Array.isArray(row)) continue;
+                const cellVal = String(row[c] ?? '').trim();
+                if (emailRegex.test(cellVal)) {
+                  emailCount++;
+                }
+              }
+              if (emailCount > bestEmailCount) {
+                bestEmailCount = emailCount;
+                bestEmailCol = c;
+              }
+            }
+
+            if (bestEmailCol !== -1 && bestEmailCount > 0) {
+              emailColIdx = bestEmailCol;
+              detectedEmailTitle = `Column ${String.fromCharCode(65 + (bestEmailCol % 26))} (Auto-detected Emails)`;
+            }
+          }
+
+          // Find column with plausible names if not found yet
+          if (nameColIdx === -1 && maxCols > 0) {
+            let bestNameCol = -1;
+            let bestNameScore = 0;
+
+            for (let c = 0; c < maxCols; c++) {
+              if (c === emailColIdx) continue;
+              let nameScore = 0;
+              for (const row of sampleRows) {
+                if (!Array.isArray(row)) continue;
+                const cellVal = String(row[c] ?? '').trim();
+                // Check if looks like a person's name (letters, spaces, dots, length between 2 and 60, not pure digits or phone)
+                const isNumeric = /^[0-9+\-\s()]+$/.test(cellVal);
+                const isUrl = cellVal.startsWith('http') || cellVal.includes('www.');
+                if (cellVal.length >= 2 && cellVal.length <= 60 && !isNumeric && !isUrl && /[a-zA-Z]/.test(cellVal)) {
+                  nameScore++;
+                }
+              }
+              if (nameScore > bestNameScore) {
+                bestNameScore = nameScore;
+                bestNameCol = c;
+              }
+            }
+
+            if (bestNameCol !== -1 && bestNameScore > 0) {
+              nameColIdx = bestNameCol;
+              detectedNameTitle = `Column ${String.fromCharCode(65 + (bestNameCol % 26))} (Auto-detected Names)`;
+            }
+          }
+        }
+
+        // If we still couldn't detect email column in this sheet, skip it
+        if (emailColIdx === -1) continue;
+
+        // Parse candidate rows
+        const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+        const validCandidates: { name: string; email: string }[] = [];
+        const seenEmails = new Set<string>();
+
+        for (let r = startRow; r < rawGrid.length; r++) {
+          const row = rawGrid[r];
+          if (!Array.isArray(row)) continue;
+
+          const rawEmail = String(row[emailColIdx] ?? '').trim().toLowerCase();
+          if (!rawEmail || !emailRegex.test(rawEmail)) continue;
+
+          let rawName = nameColIdx !== -1 ? String(row[nameColIdx] ?? '').trim() : '';
+          // Clean up name
+          rawName = rawName.replace(/[:_\-*]/g, ' ').replace(/\s+/g, ' ').trim();
+
+          // Fallback name if missing but valid email
+          if (!rawName) {
+            const prefix = rawEmail.split('@')[0].replace(/[._-]/g, ' ');
+            rawName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          }
+
+          if (seenEmails.has(rawEmail)) continue;
+          seenEmails.add(rawEmail);
+
+          validCandidates.push({
+            name: rawName,
+            email: rawEmail,
+          });
+        }
+
+        if (validCandidates.length > 0) {
+          sheetResults.push({
+            sheetName,
+            candidates: validCandidates,
+            detectedEmailHeader: detectedEmailTitle || 'Email',
+            detectedNameHeader: detectedNameTitle || 'Name',
+            totalRawRows: rawGrid.length,
+          });
+        }
+      }
+
+      // Find the best sheet with the highest number of valid candidates
+      if (sheetResults.length === 0) {
         setImportMessage({
           type: 'error',
-          text: `Could not identify required columns. Found: [${keys.join(', ')}]. Please provide columns for Name and Email.`,
+          text: `Could not identify candidate data in the uploaded file. Scanned sheet(s): [${workbook.SheetNames.join(', ')}]. Please ensure your file has valid email addresses and candidate names (e.g. columns 'Username' or 'Email', and 'Full Name').`,
         });
         setImporting(false);
         return;
       }
 
-      const parsedCandidates = rawRows
-        .map((row) => ({
-          name: String(row[nameKey] || '').trim(),
-          email: String(row[emailKey] || '').trim().toLowerCase(),
-        }))
-        .filter((c) => c.name.length > 0 && c.email.includes('@'));
-
-      if (parsedCandidates.length === 0) {
-        setImportMessage({
-          type: 'error',
-          text: 'No rows with both valid names and email addresses were found.',
-        });
-        setImporting(false);
-        return;
-      }
+      // Pick sheet with maximum valid candidate rows
+      sheetResults.sort((a, b) => b.candidates.length - a.candidates.length);
+      const best = sheetResults[0];
 
       // Send to server import API
       const res = await fetch('/api/admin/candidates/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidates: parsedCandidates }),
+        body: JSON.stringify({ candidates: best.candidates }),
       });
 
       const resData = await res.json();
@@ -179,12 +373,12 @@ export function SimpleHRConsole() {
       } else {
         setImportMessage({
           type: 'success',
-          text: `Success: ${resData.result.inserted} new candidate(s) imported, ${resData.result.updated} updated. All new candidates default to 'Decision Pending'.`,
+          text: `Success: Imported ${best.candidates.length} candidate(s) from sheet "${best.sheetName}" (${resData.result.inserted} newly added, ${resData.result.updated} updated). All new candidates default to 'Decision Pending'. [Columns used: ${best.detectedEmailHeader} & ${best.detectedNameHeader}]`,
         });
         loadCandidates();
       }
     } catch (err: any) {
-      setImportMessage({ type: 'error', text: `Failed to process file: ${err.message}` });
+      setImportMessage({ type: 'error', text: `Failed to process spreadsheet: ${err.message}` });
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -341,7 +535,7 @@ export function SimpleHRConsole() {
                 Upload Candidates
               </h2>
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, or <strong>.csv</strong>. Must contain <strong>Name</strong> and <strong>Email</strong> columns.
+                Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, or <strong>.csv</strong>. Automatically detects Google Sheets columns (<strong>Username</strong>, <strong>Full Name :</strong>, multi-tab sheets, etc.).
               </p>
             </div>
 
