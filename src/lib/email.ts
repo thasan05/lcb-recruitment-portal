@@ -37,7 +37,7 @@ export async function sendCandidateStatusEmail({
   candidateStatus,
 }: SendStatusEmailOptions): Promise<EmailSendResult> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const cleanToken = (secureToken || '').trim().replace(/^tok_.*_/, '').slice(0, 24);
+  const cleanToken = (secureToken || '').trim().slice(0, 24);
   const statusUrl = `${baseUrl.replace(/\/$/, '')}/status/${cleanToken}`;
 
   // Pick template defaults

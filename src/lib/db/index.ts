@@ -47,53 +47,57 @@ const globalStore = globalThis as unknown as {
 };
 
 if (!globalStore.__lcbCandidates) {
-  const currentTimestamp = new Date().toISOString();
-  globalStore.__lcbCandidates = [
-    {
-      id: 'c1111111-1111-1111-1111-111111111111',
-      name: 'Tanvir Hasan',
-      email: 'tanvir@example.com',
-      status: 'decision_pending',
-      secure_token: '9c7a2e8f1b4d05638a192e74',
-      email_sent: true,
-      email_sent_at: currentTimestamp,
-      created_at: currentTimestamp,
-      updated_at: currentTimestamp,
-    },
-    {
-      id: 'c2222222-2222-2222-2222-222222222222',
-      name: 'Sadia Akter',
-      email: 'sadia@example.com',
-      status: 'accepted',
-      secure_token: '4e81a95b0c2d7f36918234e7',
-      email_sent: false,
-      email_sent_at: null,
-      created_at: currentTimestamp,
-      updated_at: currentTimestamp,
-    },
-    {
-      id: 'c3333333-3333-3333-3333-333333333333',
-      name: 'Rahim Ahmed',
-      email: 'rahim@example.com',
-      status: 'rejected',
-      secure_token: '7b0294e5d1a8c3f6902518e7',
-      email_sent: false,
-      email_sent_at: null,
-      created_at: currentTimestamp,
-      updated_at: currentTimestamp,
-    },
-    {
-      id: 'c4444444-4444-4444-4444-444444444444',
-      name: 'Nusrat Jahan',
-      email: 'nusrat@example.com',
-      status: 'rejected',
-      secure_token: '2f90a84e3b1c7d65019284e5',
-      email_sent: true,
-      email_sent_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-      created_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-      updated_at: new Date(Date.now() - 35 * 86400000).toISOString(),
-    },
-  ];
+  if (isSupabaseConfigured()) {
+    globalStore.__lcbCandidates = [];
+  } else {
+    const currentTimestamp = new Date().toISOString();
+    globalStore.__lcbCandidates = [
+      {
+        id: 'c1111111-1111-1111-1111-111111111111',
+        name: 'Tanvir Hasan',
+        email: 'tanvir@example.com',
+        status: 'decision_pending',
+        secure_token: '9c7a2e8f1b4d05638a192e74',
+        email_sent: true,
+        email_sent_at: currentTimestamp,
+        created_at: currentTimestamp,
+        updated_at: currentTimestamp,
+      },
+      {
+        id: 'c2222222-2222-2222-2222-222222222222',
+        name: 'Sadia Akter',
+        email: 'sadia@example.com',
+        status: 'accepted',
+        secure_token: '4e81a95b0c2d7f36918234e7',
+        email_sent: false,
+        email_sent_at: null,
+        created_at: currentTimestamp,
+        updated_at: currentTimestamp,
+      },
+      {
+        id: 'c3333333-3333-3333-3333-333333333333',
+        name: 'Rahim Ahmed',
+        email: 'rahim@example.com',
+        status: 'rejected',
+        secure_token: '7b0294e5d1a8c3f6902518e7',
+        email_sent: false,
+        email_sent_at: null,
+        created_at: currentTimestamp,
+        updated_at: currentTimestamp,
+      },
+      {
+        id: 'c4444444-4444-4444-4444-444444444444',
+        name: 'Nusrat Jahan',
+        email: 'nusrat@example.com',
+        status: 'rejected',
+        secure_token: '2f90a84e3b1c7d65019284e5',
+        email_sent: true,
+        email_sent_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+        created_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+        updated_at: new Date(Date.now() - 35 * 86400000).toISOString(),
+      },
+    ];
+  }
 }
 
 const memoryCandidates: Candidate[] = globalStore.__lcbCandidates;
@@ -120,6 +124,7 @@ function normalizeCandidateRow(row: any): Candidate {
 
 export async function getCandidates(searchQuery?: string): Promise<Candidate[]> {
   const candidatesMap = new Map<string, Candidate>();
+  let fetchedFromSupabase = false;
 
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
@@ -135,6 +140,7 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
 
       const { data, error } = await query;
       if (!error && data) {
+        fetchedFromSupabase = true;
         for (const row of data) {
           const c = normalizeCandidateRow(row);
           if (globalStore.__lcbResetTimestamp) {
@@ -153,22 +159,27 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
     }
   }
 
-  // Merge in-memory candidates (guarantees immediate responsiveness during local dev/testing)
+  // If Supabase is configured and connected, return Supabase candidates directly
+  if (fetchedFromSupabase) {
+    let list = Array.from(candidatesMap.values());
+    if (searchQuery && searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+      );
+    }
+    return list.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+
+  // Fallback to memory candidates only when Supabase is not connected
   for (const c of memoryCandidates) {
     const sanitizedCandidate: Candidate = {
       ...c,
       secure_token: ensureHashedToken(c.secure_token, c.id),
     };
-    const existing = candidatesMap.get(c.id);
-    if (!existing) {
-      candidatesMap.set(c.id, sanitizedCandidate);
-    } else {
-      const existingTime = new Date(existing.updated_at).getTime();
-      const memTime = new Date(sanitizedCandidate.updated_at).getTime();
-      if (memTime >= existingTime) {
-        candidatesMap.set(c.id, { ...existing, ...sanitizedCandidate });
-      }
-    }
+    candidatesMap.set(c.id, sanitizedCandidate);
   }
 
   let list = Array.from(candidatesMap.values());
@@ -221,17 +232,7 @@ export async function getCandidateBySecureToken(
     canonicalToken: string,
     isLegacyToken: boolean
   ): CandidatePublicView | null => {
-    // Check if memory has a newer version of this candidate
-    const rowId = row.id;
-    const memCandidate = memoryCandidates.find(
-      (c) =>
-        c.id === rowId ||
-        (row.email && c.email?.toLowerCase() === row.email?.toLowerCase()) ||
-        matchesCandidate(c.secure_token, c.id)
-    );
-    const effective = memCandidate || row;
-
-    const createdAt = effective.created_at || effective.date_added;
+    const createdAt = row.created_at || row.application_date || row.date_added;
     if (globalStore.__lcbResetTimestamp && createdAt) {
       const rowTime = new Date(createdAt).getTime();
       if (!isNaN(rowTime) && rowTime < globalStore.__lcbResetTimestamp) {
@@ -244,9 +245,9 @@ export async function getCandidateBySecureToken(
       : undefined;
 
     return {
-      name: effective.name || effective.full_name || 'Candidate',
-      status: normalizeCandidateStatus(effective.status),
-      updated_at: effective.updated_at || effective.last_updated || new Date().toISOString(),
+      name: row.name || row.full_name || 'Candidate',
+      status: normalizeCandidateStatus(row.status),
+      updated_at: row.updated_at || row.last_updated || new Date().toISOString(),
       created_at: createdAt || undefined,
       is_expired: expired,
       expired_at: expiredAt,
@@ -269,16 +270,7 @@ export async function getCandidateBySecureToken(
     );
   };
 
-  // 1. Check in-memory candidates first
-  for (const c of memoryCandidates) {
-    const canonical = ensureHashedToken(c.secure_token, c.id);
-    if (matchesCandidate(c.secure_token, c.id)) {
-      const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
-      return toPublicView(c, canonical, !isExactCanonical);
-    }
-  }
-
-  // 2. Query Supabase
+  // 1. Query Supabase FIRST if configured (primary authoritative database)
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
       const { data: allRows, error } = await supabaseAdmin.from('candidates').select('*');
@@ -293,6 +285,15 @@ export async function getCandidateBySecureToken(
       }
     } catch (err) {
       console.warn('Supabase token lookup failed:', err);
+    }
+  }
+
+  // 2. Check in-memory store as fallback
+  for (const c of memoryCandidates) {
+    const canonical = ensureHashedToken(c.secure_token, c.id);
+    if (matchesCandidate(c.secure_token, c.id)) {
+      const isExactCanonical = cleanToken === canonical && /^[a-f0-9]{24}$/.test(cleanToken);
+      return toPublicView(c, canonical, !isExactCanonical);
     }
   }
 
@@ -391,7 +392,7 @@ export async function createCandidate(data: {
   const now = new Date().toISOString();
   const newId = crypto.randomUUID();
 
-  const newCand: Candidate = {
+  let newCand: Candidate = {
     id: newId,
     name: cleanName,
     email: cleanEmail,
@@ -406,21 +407,29 @@ export async function createCandidate(data: {
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
       const appId = 'LCB-2026-' + Math.floor(1000 + Math.random() * 9000);
-      await supabaseAdmin.from('candidates').insert({
-        id: newId,
-        application_id: appId,
-        full_name: cleanName,
-        email: cleanEmail,
-        phone: 'N/A',
-        position: 'Applicant',
-        department: 'General',
-        campaign: 'LCB Central Team Recruitment — 2026',
-        status,
-        secure_token: token,
-        application_date: now,
-        last_updated: now,
-        created_at: now,
-      });
+      const { data: supaData, error: supaErr } = await supabaseAdmin
+        .from('candidates')
+        .insert({
+          id: newId,
+          application_id: appId,
+          full_name: cleanName,
+          email: cleanEmail,
+          phone: 'N/A',
+          position: 'Applicant',
+          department: 'General',
+          campaign: 'LCB Central Team Recruitment — 2026',
+          status,
+          secure_token: token,
+          application_date: now,
+          last_updated: now,
+          created_at: now,
+        })
+        .select('*')
+        .maybeSingle();
+
+      if (!supaErr && supaData) {
+        newCand = normalizeCandidateRow(supaData);
+      }
     } catch (err: any) {
       console.warn('Supabase createCandidate failed:', err?.message);
     }

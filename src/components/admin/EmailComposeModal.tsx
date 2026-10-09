@@ -57,25 +57,8 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
   if (!isOpen || !candidate) return null;
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-  // Enforce shortened 24-character hex hash with strictly zero names
-  const cleanToken = (() => {
-    const raw = (candidate.secure_token || '').trim().toLowerCase();
-    if (/^[a-f0-9]{24}$/.test(raw)) return raw;
-    if (/^[a-f0-9]{25,}$/.test(raw)) return raw.slice(0, 24);
-    // Deterministic 24-character hex hash fallback
-    let h1 = 0xdeadbeef, h2 = 0x41c64e6d;
-    const str = 'lcb_cand_' + (candidate.id || candidate.email || 'token');
-    for (let i = 0; i < str.length; i++) {
-      const ch = str.charCodeAt(i);
-      h1 = Math.imul(h1 ^ ch, 2654435761);
-      h2 = Math.imul(h2 ^ ch, 1597334677);
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    const p1 = (h1 >>> 0).toString(16).padStart(8, '0');
-    const p2 = (h2 >>> 0).toString(16).padStart(8, '0');
-    return (p1 + p2 + '8a2b3c4d').slice(0, 24);
-  })();
+  // Use the canonical 24-character secure token
+  const cleanToken = (candidate.secure_token || '').trim().slice(0, 24);
   const statusUrl = `${origin}/status/${cleanToken}`;
   const statusMeta = STATUS_CONFIG[candidate.status] || STATUS_CONFIG.decision_pending;
 

@@ -518,10 +518,7 @@ export function SimpleHRConsole() {
 
   // Helper to ensure clean shortened 24-character token
   const getCleanToken = (token: string, id: string) => {
-    const raw = (token || '').trim().toLowerCase();
-    if (/^[a-f0-9]{24}$/.test(raw)) return raw;
-    if (/^[a-f0-9]{25,}$/.test(raw)) return raw.slice(0, 24);
-    return (token || '').replace(/^tok_.*_/, '').slice(0, 24);
+    return (token || '').trim().slice(0, 24);
   };
 
   // Copy private URL helper
