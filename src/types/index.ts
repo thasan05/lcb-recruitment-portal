@@ -1,5 +1,37 @@
 export type CandidateStatus = 'decision_pending' | 'accepted' | 'rejected';
 
+export function normalizeCandidateStatus(raw?: string | null): CandidateStatus {
+  if (!raw) return 'decision_pending';
+  const s = raw.trim().toLowerCase().replace(/[\s_-]+/g, '_');
+  if (
+    [
+      'accepted',
+      'selected',
+      'approved',
+      'pass',
+      'passed',
+      'offer',
+      'offer_extended',
+      'hired',
+    ].includes(s)
+  ) {
+    return 'accepted';
+  }
+  if (
+    [
+      'rejected',
+      'not_selected',
+      'declined',
+      'fail',
+      'failed',
+      'dropped',
+    ].includes(s)
+  ) {
+    return 'rejected';
+  }
+  return 'decision_pending';
+}
+
 export interface StatusMeta {
   key: CandidateStatus;
   label: string;

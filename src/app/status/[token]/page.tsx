@@ -3,6 +3,9 @@ import { getCandidateBySecureToken } from '@/lib/db';
 import { CandidateStatusCard } from '@/components/candidate/CandidateStatusCard';
 import { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface Props {
   params: Promise<{ token: string }>;
 }

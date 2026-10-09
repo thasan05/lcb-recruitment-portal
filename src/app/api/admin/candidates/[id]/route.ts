@@ -3,6 +3,9 @@ import { checkAdminAuth } from '@/lib/auth';
 import { updateCandidateDetails, deleteCandidate } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const VALID_STATUSES: CandidateStatus[] = ['decision_pending', 'accepted', 'rejected'];
 
 export async function PATCH(

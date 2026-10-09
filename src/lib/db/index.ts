@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { Candidate, CandidateStatus, CandidatePublicView } from '@/types';
+import { Candidate, CandidateStatus, CandidatePublicView, normalizeCandidateStatus } from '@/types';
 import { isSupabaseConfigured, supabaseAdmin, supabaseClient } from '../supabase';
 
 // Compact cryptographic token length: 24 hex characters (96 bits of entropy, unguessable, short & mobile-friendly)
@@ -109,7 +109,7 @@ function normalizeCandidateRow(row: any): Candidate {
     id: row.id,
     name: row.name || row.full_name || 'Candidate',
     email: row.email,
-    status: (row.status?.toLowerCase() || 'decision_pending') as CandidateStatus,
+    status: normalizeCandidateStatus(row.status),
     secure_token: ensureHashedToken(row.secure_token, row.id),
     email_sent: Boolean(row.email_sent),
     email_sent_at: row.email_sent_at || null,
@@ -223,7 +223,12 @@ export async function getCandidateBySecureToken(
   ): CandidatePublicView | null => {
     // Check if memory has a newer version of this candidate
     const rowId = row.id;
-    const memCandidate = memoryCandidates.find((c) => c.id === rowId || c.email === row.email);
+    const memCandidate = memoryCandidates.find(
+      (c) =>
+        c.id === rowId ||
+        (row.email && c.email?.toLowerCase() === row.email?.toLowerCase()) ||
+        matchesCandidate(c.secure_token, c.id)
+    );
     const effective = memCandidate || row;
 
     const createdAt = effective.created_at || effective.date_added;
@@ -240,7 +245,7 @@ export async function getCandidateBySecureToken(
 
     return {
       name: effective.name || effective.full_name || 'Candidate',
-      status: (effective.status?.toLowerCase() || 'decision_pending') as CandidateStatus,
+      status: normalizeCandidateStatus(effective.status),
       updated_at: effective.updated_at || effective.last_updated || new Date().toISOString(),
       created_at: createdAt || undefined,
       is_expired: expired,
@@ -294,60 +299,6 @@ export async function getCandidateBySecureToken(
   return null;
 }
 
-export async function updateCandidateStatus(
-  id: string,
-  status: CandidateStatus
-): Promise<Candidate | null> {
-  const now = new Date().toISOString();
-
-  // Update memory store
-  const idx = memoryCandidates.findIndex((c) => c.id === id);
-  if (idx !== -1) {
-    memoryCandidates[idx] = {
-      ...memoryCandidates[idx],
-      status,
-      updated_at: now,
-    };
-  } else {
-    // If not in memory, fetch and add to memory store with now
-    const existing = await getCandidateById(id);
-    if (existing) {
-      const updatedItem: Candidate = {
-        ...existing,
-        status,
-        updated_at: now,
-      };
-      memoryCandidates.push(updatedItem);
-    }
-  }
-
-  if (isSupabaseConfigured() && supabaseAdmin) {
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('candidates')
-        .update({ status, last_updated: now })
-        .eq('id', id)
-        .select('*')
-        .maybeSingle();
-
-      if (!error && data) {
-        const norm = normalizeCandidateRow(data);
-        norm.updated_at = now;
-        return norm;
-      }
-    } catch (err) {
-      console.warn('Supabase status update failed:', err);
-    }
-  }
-
-  const found = memoryCandidates.find((c) => c.id === id);
-  if (found) {
-    return { ...found, status, updated_at: now };
-  }
-
-  return null;
-}
-
 export async function updateCandidateDetails(
   id: string,
   updates: {
@@ -359,9 +310,14 @@ export async function updateCandidateDetails(
   const now = new Date().toISOString();
   const cleanName = updates.name ? updates.name.trim() : undefined;
   const cleanEmail = updates.email ? updates.email.trim().toLowerCase() : undefined;
+  const normStatus = updates.status ? normalizeCandidateStatus(updates.status) : undefined;
 
-  // Update memory store
-  const idx = memoryCandidates.findIndex((c) => c.id === id);
+  // 1. Update memory store
+  let idx = memoryCandidates.findIndex((c) => c.id === id);
+  if (idx === -1 && cleanEmail) {
+    idx = memoryCandidates.findIndex((c) => c.email.toLowerCase() === cleanEmail);
+  }
+
   let updatedCandidate: Candidate | null = null;
 
   if (idx !== -1) {
@@ -369,18 +325,32 @@ export async function updateCandidateDetails(
       ...memoryCandidates[idx],
       ...(cleanName ? { name: cleanName } : {}),
       ...(cleanEmail ? { email: cleanEmail } : {}),
-      ...(updates.status ? { status: updates.status } : {}),
+      ...(normStatus ? { status: normStatus } : {}),
       updated_at: now,
     };
     updatedCandidate = memoryCandidates[idx];
+  } else {
+    // If candidate came from Supabase or was not in memory, pull existing record and store in memory
+    const existing = await getCandidateById(id);
+    if (existing) {
+      updatedCandidate = {
+        ...existing,
+        ...(cleanName ? { name: cleanName } : {}),
+        ...(cleanEmail ? { email: cleanEmail } : {}),
+        ...(normStatus ? { status: normStatus } : {}),
+        updated_at: now,
+      };
+      memoryCandidates.unshift(updatedCandidate);
+    }
   }
 
+  // 2. Persist to Supabase if configured
   if (isSupabaseConfigured() && supabaseAdmin) {
     try {
       const patchObj: Record<string, any> = { last_updated: now };
       if (cleanName) patchObj.full_name = cleanName;
       if (cleanEmail) patchObj.email = cleanEmail;
-      if (updates.status) patchObj.status = updates.status;
+      if (normStatus) patchObj.status = normStatus;
 
       const { data, error } = await supabaseAdmin
         .from('candidates')
@@ -400,6 +370,13 @@ export async function updateCandidateDetails(
   }
 
   return updatedCandidate;
+}
+
+export async function updateCandidateStatus(
+  id: string,
+  status: CandidateStatus
+): Promise<Candidate | null> {
+  return updateCandidateDetails(id, { status });
 }
 
 export async function createCandidate(data: {

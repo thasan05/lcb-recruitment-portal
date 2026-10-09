@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CandidatePublicView, STATUS_CONFIG } from '@/types';
+import { CandidatePublicView, STATUS_CONFIG, normalizeCandidateStatus } from '@/types';
 import { CheckCircle2, Clock, XCircle, Sparkles, Copy, Check, ShieldCheck, Share2, Mail } from 'lucide-react';
 import { LCBLogo } from '@/components/LCBLogo';
 import { formatLastUpdated } from '@/lib/date-format';
@@ -12,10 +12,11 @@ interface Props {
 
 export function CandidateStatusCard({ candidate }: Props) {
   const [copied, setCopied] = useState(false);
-  const meta = STATUS_CONFIG[candidate.status] || STATUS_CONFIG.decision_pending;
-  const isAccepted = candidate.status === 'accepted';
-  const isPending = candidate.status === 'decision_pending';
-  const isRejected = candidate.status === 'rejected';
+  const effectiveStatus = normalizeCandidateStatus(candidate.status);
+  const meta = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.decision_pending;
+  const isAccepted = effectiveStatus === 'accepted';
+  const isPending = effectiveStatus === 'decision_pending';
+  const isRejected = effectiveStatus === 'rejected';
 
   const handleCopyLink = () => {
     if (typeof window !== 'undefined') {

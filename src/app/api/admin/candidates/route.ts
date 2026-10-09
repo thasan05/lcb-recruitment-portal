@@ -3,6 +3,9 @@ import { checkAdminAuth } from '@/lib/auth';
 import { getCandidates, resetAllCandidates, createCandidate } from '@/lib/db';
 import { CandidateStatus } from '@/types';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   const isAdmin = await checkAdminAuth();
   if (!isAdmin) {
