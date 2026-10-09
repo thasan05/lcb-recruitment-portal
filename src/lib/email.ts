@@ -147,11 +147,23 @@ ${SENDER_EMAIL}
 </html>
 `;
 
+  // Helper to clean API keys (strips quotes, whitespace, Bearer prefix, and dummy placeholders)
+  const cleanApiKey = (raw?: string): string | undefined => {
+    if (!raw) return undefined;
+    let key = raw.trim();
+    key = key.replace(/^["'`]+|["'`]+$/g, '').trim();
+    key = key.replace(/^Bearer\s+/i, '').trim();
+    if (!key || key.includes('your_api_key') || key.includes('placeholder')) {
+      return undefined;
+    }
+    return key;
+  };
+
   // Check configured email dispatch providers in priority order:
   // 1. Resend API (Direct HTTP API, ideal for custom domain & high deliverability without SMTP restrictions)
   // 2. Custom Domain SMTP (e.g. cPanel, Brevo, SendGrid)
   // 3. Official Gmail App Password / OAuth2
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendApiKey = cleanApiKey(process.env.RESEND_API_KEY);
   const smtpHost = process.env.SMTP_HOST;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
   const gmailClientId = process.env.GMAIL_CLIENT_ID;
@@ -187,11 +199,12 @@ ${SENDER_EMAIL}
   try {
     // Provider 1: Resend HTTP API (No port/SMTP blocking, perfect for Vercel + custom domain)
     if (resendApiKey) {
-      const fromAddress = process.env.RESEND_FROM || `LinkedIn Community Bangladesh <recruitment@linkedincommunitybangladesh.com>`;
+      const fromAddress = (process.env.RESEND_FROM || '').trim().replace(/^["']|["']$/g, '') ||
+        `LinkedIn Community Bangladesh <recruitment@linkedincommunitybangladesh.com>`;
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${resendApiKey.trim()}`,
+          Authorization: `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -206,7 +219,17 @@ ${SENDER_EMAIL}
 
       const resendData = await resendRes.json();
       if (!resendRes.ok) {
-        throw new Error(resendData.message || resendData.error || 'Failed to dispatch email via Resend');
+        const errorMsg = resendData.message || resendData.error || 'Failed to dispatch email via Resend';
+        if (
+          resendRes.status === 401 ||
+          resendRes.status === 400 ||
+          errorMsg.toLowerCase().includes('api key')
+        ) {
+          throw new Error(
+            `Resend API Key Error: "${errorMsg}". Please check Vercel Settings > Environment Variables: Ensure RESEND_API_KEY is configured with your active Resend key (with no surrounding quotes or whitespace), and trigger a Redeploy.`
+          );
+        }
+        throw new Error(errorMsg);
       }
 
       console.log(`✅ [RESEND SENT]: Message dispatched to ${toEmail} (ID: ${resendData.id})`);
@@ -276,8 +299,10 @@ ${SENDER_EMAIL}
 }
 
 export function isGmailConfigured(): boolean {
+  const cleanKey = (process.env.RESEND_API_KEY || '').trim().replace(/^["'`]+|["'`]+$/g, '');
+  const isResendValid = cleanKey.length > 10 && !cleanKey.includes('your_api_key');
   return Boolean(
-    process.env.RESEND_API_KEY ||
+    isResendValid ||
     process.env.SMTP_HOST ||
     process.env.GMAIL_APP_PASSWORD ||
     (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN)
