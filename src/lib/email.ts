@@ -36,7 +36,10 @@ export async function sendCandidateStatusEmail({
   customMessage,
   candidateStatus,
 }: SendStatusEmailOptions): Promise<EmailSendResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const envUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
+  const baseUrl = (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1'))
+    ? envUrl
+    : 'https://recruitment.linkedincommunitybangladesh.com';
   const cleanToken = (secureToken || '').trim().slice(0, 24);
   const statusUrl = `${baseUrl.replace(/\/$/, '')}/status/${cleanToken}`;
 

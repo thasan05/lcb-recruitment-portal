@@ -29,8 +29,8 @@ export function ensureHashedToken(token: string | undefined, id: string): string
   return clean.slice(0, SECURE_TOKEN_LENGTH);
 }
 
-// Token lifetime is 30 days (1 month) to protect resources and cycle boundaries
-export const TOKEN_EXPIRATION_DAYS = 30;
+// Token lifetime is 90 days to protect resources and cycle boundaries
+export const TOKEN_EXPIRATION_DAYS = 90;
 export const TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
 
 export function isTokenExpired(createdAt?: string | null): boolean {
@@ -43,7 +43,6 @@ export function isTokenExpired(createdAt?: string | null): boolean {
 // In-Memory fallback store attached to globalThis to ensure sharing across Next.js App Router server chunks
 const globalStore = globalThis as unknown as {
   __lcbCandidates?: Candidate[];
-  __lcbResetTimestamp?: number;
 };
 
 if (!globalStore.__lcbCandidates) {
@@ -143,12 +142,6 @@ export async function getCandidates(searchQuery?: string): Promise<Candidate[]> 
         fetchedFromSupabase = true;
         for (const row of data) {
           const c = normalizeCandidateRow(row);
-          if (globalStore.__lcbResetTimestamp) {
-            const rowTime = new Date(c.created_at).getTime();
-            if (!isNaN(rowTime) && rowTime < globalStore.__lcbResetTimestamp) {
-              continue;
-            }
-          }
           candidatesMap.set(c.id, c);
         }
       } else if (error) {
@@ -233,12 +226,6 @@ export async function getCandidateBySecureToken(
     isLegacyToken: boolean
   ): CandidatePublicView | null => {
     const createdAt = row.created_at || row.application_date || row.date_added;
-    if (globalStore.__lcbResetTimestamp && createdAt) {
-      const rowTime = new Date(createdAt).getTime();
-      if (!isNaN(rowTime) && rowTime < globalStore.__lcbResetTimestamp) {
-        return null;
-      }
-    }
     const expired = isTokenExpired(createdAt);
     const expiredAt = createdAt
       ? new Date(new Date(createdAt).getTime() + TOKEN_EXPIRATION_MS).toISOString()
@@ -258,14 +245,17 @@ export async function getCandidateBySecureToken(
 
   const matchesCandidate = (candToken: string | undefined, candId: string) => {
     if (!candToken) return false;
-    const raw = candToken.toLowerCase();
-    const canonical = ensureHashedToken(candToken, candId).toLowerCase();
+    const raw = candToken.toLowerCase().trim();
+    const canonical = ensureHashedToken(candToken, candId).toLowerCase().trim();
     return (
       raw === cleanToken ||
       canonical === cleanToken ||
       raw.startsWith(cleanToken) ||
+      cleanToken.startsWith(raw) ||
+      canonical.startsWith(cleanToken) ||
       cleanToken.startsWith(canonical) ||
       raw.slice(0, SECURE_TOKEN_LENGTH) === cleanToken.slice(0, SECURE_TOKEN_LENGTH) ||
+      canonical.slice(0, SECURE_TOKEN_LENGTH) === cleanToken.slice(0, SECURE_TOKEN_LENGTH) ||
       ensureHashedToken(cleanToken, candId) === canonical
     );
   };
@@ -530,8 +520,10 @@ export async function importCandidates(
             updated++;
           }
         } else {
-          const appId = 'LCB-2026-' + Math.floor(1000 + Math.random() * 9000);
+          const newId = crypto.randomUUID();
+          const appId = 'LCB-2026-' + newId.slice(0, 8).toUpperCase();
           const insertPayload: Record<string, any> = {
+            id: newId,
             application_id: appId,
             full_name: cleanName,
             email: cleanEmail,
@@ -612,7 +604,6 @@ export async function deleteCandidate(id: string): Promise<boolean> {
 
 export async function resetAllCandidates(): Promise<{ success: boolean; count: number }> {
   const count = memoryCandidates.length;
-  globalStore.__lcbResetTimestamp = Date.now();
   // Clear in-memory array completely
   memoryCandidates.splice(0, memoryCandidates.length);
 
