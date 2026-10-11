@@ -199,7 +199,7 @@ ${SENDER_EMAIL}
 
               <p style="margin: 0; font-size: 14px; line-height: 22px; color: #94a3b8;">
                 Warm regards,<br />
-                <strong style="color: #ffffff;">Tanvir Hasan</strong><br />
+                <strong style="color: #ffffff;">Md. Tanvir Hasan</strong><br />
                 LinkedIn Community Bangladesh (LCB)<br />
                 <a href="mailto:${escapeHtml(SENDER_EMAIL)}" style="color: #38bdf8; text-decoration: none;">${escapeHtml(SENDER_EMAIL)}</a>
               </p>

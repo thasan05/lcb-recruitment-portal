@@ -308,7 +308,7 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
               {/* Sign-off Preview */}
               <div className="text-xs text-slate-400 pt-3 border-t border-white/[0.06] space-y-0.5">
                 <p>Warm regards,</p>
-                <p className="font-semibold text-white">Tanvir Hasan</p>
+                <p className="font-semibold text-white">Md. Tanvir Hasan</p>
                 <p className="text-slate-400 text-[11px]">LinkedIn Community Bangladesh (LCB)</p>
               </div>
             </div>
