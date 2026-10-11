@@ -295,9 +295,21 @@ export function EmailComposeModal({ isOpen, onClose, candidate, onEmailSent }: P
               </div>
 
               {/* Link Info */}
-              <div className="text-[11px] text-slate-500 border-t border-white/[0.06] pt-3">
-                <span>Private candidate URL: </span>
-                <span className="text-cyan-400 font-mono break-all">{statusUrl}</span>
+              <div className="text-[11px] text-slate-500 border-t border-white/[0.06] pt-3 space-y-1.5">
+                <div>
+                  <span>Private candidate URL: </span>
+                  <span className="text-cyan-400 font-mono break-all">{statusUrl}</span>
+                </div>
+                <div className="text-slate-400">
+                  If you have any query, feel free to reply to this email.
+                </div>
+              </div>
+
+              {/* Sign-off Preview */}
+              <div className="text-xs text-slate-400 pt-3 border-t border-white/[0.06] space-y-0.5">
+                <p>Warm regards,</p>
+                <p className="font-semibold text-white">Tanvir Hasan</p>
+                <p className="text-slate-400 text-[11px]">LinkedIn Community Bangladesh (LCB)</p>
               </div>
             </div>
           )}

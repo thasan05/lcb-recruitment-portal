@@ -134,9 +134,11 @@ ${statusUrl}
 
 Note: You do not need to create an account or remember a password. This secure link gives you direct access to your personal candidate progress.
 
-Best regards,
-Human Resources
-LinkedIn Community Bangladesh
+If you have any query, feel free to reply to this email.
+
+Warm regards,
+Tanvir Hasan
+LinkedIn Community Bangladesh (LCB)
 ${SENDER_EMAIL}
 `;
 
@@ -186,15 +188,18 @@ ${SENDER_EMAIL}
               <p style="margin: 0 0 10px 0; font-size: 13px; color: #94a3b8; line-height: 20px;">
                 You do not need a password or login credentials. Your unique link provides instant, confidential access.
               </p>
-              <p style="margin: 0 0 24px 0; font-size: 12px; color: #64748b; word-break: break-all;">
+              <p style="margin: 0 0 14px 0; font-size: 12px; color: #64748b; word-break: break-all;">
                 Direct URL: <a href="${escapeHtml(statusUrl)}" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">${escapeHtml(statusUrl)}</a>
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 13px; color: #94a3b8; line-height: 20px;">
+                If you have any query, feel free to reply to this email.
               </p>
 
               <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 28px 0;" />
 
               <p style="margin: 0; font-size: 14px; line-height: 22px; color: #94a3b8;">
                 Warm regards,<br />
-                <strong style="color: #ffffff;">Human Resources Committee</strong><br />
+                <strong style="color: #ffffff;">Tanvir Hasan</strong><br />
                 LinkedIn Community Bangladesh (LCB)<br />
                 <a href="mailto:${escapeHtml(SENDER_EMAIL)}" style="color: #38bdf8; text-decoration: none;">${escapeHtml(SENDER_EMAIL)}</a>
               </p>
@@ -314,6 +319,7 @@ ${SENDER_EMAIL}
     const info = await transporter.sendMail({
       from: `"${SENDER_NAME}" <${SENDER_EMAIL}>`,
       to: cleanToEmail,
+      replyTo: SENDER_EMAIL,
       subject: finalSubject,
       text: plainText,
       html: htmlContent,
