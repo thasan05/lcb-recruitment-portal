@@ -138,6 +138,7 @@ If you have any query, feel free to reply to this email.
 
 Warm regards,
 Md. Tanvir Hasan
+Deputy Catalyst, HR & Talent Acquisition
 LinkedIn Community Bangladesh (LCB)
 ${SENDER_EMAIL}
 `;
@@ -199,7 +200,8 @@ ${SENDER_EMAIL}
 
               <p style="margin: 0; font-size: 14px; line-height: 22px; color: #94a3b8;">
                 Warm regards,<br />
-                <strong style="color: #ffffff;">Md. Tanvir Hasan</strong><br />
+                <span style="display: inline-block; margin-top: 6px; font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em;">Md. Tanvir Hasan</span><br />
+                <span style="display: inline-block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: #38bdf8;">Deputy Catalyst, HR &amp; Talent Acquisition</span><br />
                 LinkedIn Community Bangladesh (LCB)<br />
                 <a href="mailto:${escapeHtml(SENDER_EMAIL)}" style="color: #38bdf8; text-decoration: none;">${escapeHtml(SENDER_EMAIL)}</a>
               </p>
