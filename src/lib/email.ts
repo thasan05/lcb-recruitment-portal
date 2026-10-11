@@ -137,7 +137,7 @@ Note: You do not need to create an account or remember a password. This secure l
 If you have any query, feel free to reply to this email.
 
 Warm regards,
-Tanvir Hasan
+Md. Tanvir Hasan
 LinkedIn Community Bangladesh (LCB)
 ${SENDER_EMAIL}
 `;
